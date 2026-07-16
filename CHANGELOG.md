@@ -19,6 +19,8 @@ Released 2026-07-16.
 
 - Standardized project naming and release metadata for the first public release.
 - Replaced speed-control artwork with original project-owned SVG icons.
+- Made Precise AAC bitrate adapt to source quality and channel count when `ffprobe` is available.
+- Changed the first-install export folder default to the user's Desktop.
 - Added an MIT license and deterministic version-aware packaging.
 - Improved documentation, accessibility labels, reduced-motion handling, and release tests.
 

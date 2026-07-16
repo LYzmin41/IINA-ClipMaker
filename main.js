@@ -64,7 +64,13 @@ const FFMPEG_CANDIDATE_PATHS = [
   "/usr/bin/ffmpeg",
   "/opt/local/bin/ffmpeg"
 ];
-const DEFAULT_OUTPUT_FOLDER = "~/Movies/IINA clips";
+const FFPROBE_CANDIDATE_PATHS = [
+  "/opt/homebrew/bin/ffprobe",
+  "/usr/local/bin/ffprobe",
+  "/usr/bin/ffprobe",
+  "/opt/local/bin/ffprobe"
+];
+const DEFAULT_OUTPUT_FOLDER = "~/Desktop";
 const SOURCE_CONTAINER_VALUE = "source";
 const CLIP_SORT_MODES = ["custom", "creation", "name", "duration", "in", "out"];
 const CLIP_SORT_DIRECTIONS = ["ascending", "descending"];
@@ -1461,6 +1467,51 @@ async function findDetectedFfmpeg() {
   return null;
 }
 
+async function resolveFfprobePath(ffmpegPath) {
+  const candidates = [];
+  const normalizedFfmpegPath = normalizeFfmpegPathPreference(ffmpegPath);
+  if (normalizedFfmpegPath) candidates.push(`${dirname(normalizedFfmpegPath)}/ffprobe`);
+  candidates.push(...FFPROBE_CANDIDATE_PATHS);
+  const installedCandidate = dedupePaths(candidates).find((candidate) => file.exists(candidate));
+  if (installedCandidate) return installedCandidate;
+  const whichPath = await resolveCommandPath("/usr/bin/which", ["ffprobe"]);
+  return whichPath && file.exists(whichPath) ? whichPath : "";
+}
+
+function normalizedAudioStreamMetadata(stream) {
+  const value = stream && typeof stream === "object" ? stream : {};
+  const bitRate = Number(value.bit_rate !== undefined ? value.bit_rate : value.bitRate);
+  const sampleRate = Number(value.sample_rate !== undefined ? value.sample_rate : value.sampleRate);
+  const channels = Math.round(Number(value.channels));
+  return {
+    codecName: String(value.codec_name || value.codecName || "").trim().toLowerCase(),
+    bitRate: Number.isFinite(bitRate) && bitRate > 0 ? bitRate : null,
+    sampleRate: Number.isFinite(sampleRate) && sampleRate > 0 ? sampleRate : null,
+    channels: Number.isFinite(channels) && channels > 0 ? channels : null,
+    channelLayout: String(value.channel_layout || value.channelLayout || "").trim().toLowerCase()
+  };
+}
+
+async function probeAudioStreams(inputPath, ffmpegPath) {
+  try {
+    const ffprobePath = await resolveFfprobePath(ffmpegPath);
+    if (!ffprobePath || isDisposed) return [];
+    const result = await execWithSoftTimeout(ffprobePath, [
+      "-v", "error",
+      "-select_streams", "a",
+      "-show_entries", "stream=codec_name,bit_rate,sample_rate,channels,channel_layout",
+      "-of", "json",
+      inputPath
+    ], dirname(inputPath), 4000);
+    if (isDisposed || result.timedOut || result.status !== 0) return [];
+    const parsed = JSON.parse(String(result.stdout || "{}"));
+    return Array.isArray(parsed.streams) ? parsed.streams.map(normalizedAudioStreamMetadata) : [];
+  } catch (error) {
+    logError("Could not inspect source audio; using the default AAC bitrate", error);
+    return [];
+  }
+}
+
 async function refreshFfmpegIfPreferenceChanged(force) {
   if (isDisposed || ffmpegPreferenceCheckInFlight) return;
   const now = Date.now();
@@ -2100,12 +2151,63 @@ function stableOutputPath(clip, index, explicitFolder) {
   return candidate;
 }
 
+function sourceAudioIsLossless(stream) {
+  const codec = String(stream && stream.codecName || "").toLowerCase();
+  return codec === "flac" || codec === "alac" || codec === "ape" || codec === "wavpack" ||
+    codec === "truehd" || codec.startsWith("pcm_");
+}
+
+function adaptiveAacBitrateKbps(stream) {
+  const metadata = normalizedAudioStreamMetadata(stream);
+  const channels = metadata.channels || 2;
+  const sourceKbps = metadata.bitRate ? metadata.bitRate / 1000 : null;
+
+  if (channels === 1) {
+    if (sourceAudioIsLossless(metadata)) return 192;
+    if (!sourceKbps) return 128;
+    if (sourceKbps <= 64) return 96;
+    if (sourceKbps <= 128) return 128;
+    if (sourceKbps <= 160) return 160;
+    return 192;
+  }
+
+  if (channels <= 2) {
+    if (sourceAudioIsLossless(metadata)) return 320;
+    if (!sourceKbps) return 192;
+    if (sourceKbps <= 96) return 128;
+    if (sourceKbps <= 128) return 160;
+    if (sourceKbps <= 192) return 192;
+    if (sourceKbps <= 256) return 256;
+    return 320;
+  }
+
+  if (sourceAudioIsLossless(metadata) || !sourceKbps) return 512;
+  const minimum = channels >= 6 ? 384 : 256;
+  const requested = Math.max(minimum, sourceKbps);
+  const tiers = [256, 320, 384, 448, 512];
+  return tiers.find((tier) => requested <= tier) || 512;
+}
+
+function appendAdaptiveAudioBitrates(args, audioStreams) {
+  const streams = Array.isArray(audioStreams) ? audioStreams : [];
+  if (!streams.length) {
+    args.push("-b:a", "192k");
+    return [192];
+  }
+  return streams.map((stream, index) => {
+    const bitrate = adaptiveAacBitrateKbps(stream);
+    args.push(`-b:a:${index}`, `${bitrate}k`);
+    return bitrate;
+  });
+}
+
 function buildExportArguments(options) {
   const mode = normalizeExportModePreference(options && options.mode);
   const inputPath = options && options.inputPath;
   const outputPath = options && options.outputPath;
   const start = Number(options && options.start);
   const duration = Number(options && options.duration);
+  const audioStreams = options && options.audioStreams;
   const container = String((options && options.container) || extension(outputPath) || "").toLowerCase();
   if (!inputPath) throw new Error("Missing export input path");
   if (!outputPath) throw new Error("Missing export output path");
@@ -2136,9 +2238,9 @@ function buildExportArguments(options) {
       "-c:v", "libx264",
       "-preset", "veryfast",
       "-crf", "18",
-      "-c:a", "aac",
-      "-b:a", "192k"
+      "-c:a", "aac"
     );
+    appendAdaptiveAudioBitrates(args, audioStreams);
     if (containerSupportsFastStart(container)) {
       args.push("-movflags", "+faststart");
     }
@@ -2152,14 +2254,15 @@ function buildExportArguments(options) {
   };
 }
 
-function stableFfmpegPlan(clip, outputPath, mode) {
+function stableFfmpegPlan(clip, outputPath, mode, audioStreams) {
   return buildExportArguments({
     mode,
     inputPath: clip.sourceFilePath,
     outputPath,
     start: clip.inPoint,
     duration: clip.outPoint - clip.inPoint,
-    container: extension(outputPath)
+    container: extension(outputPath),
+    audioStreams
   });
 }
 
@@ -2313,6 +2416,8 @@ async function exportStableClips(all, selectedIds, orderedVisibleIds) {
   exportPreflightInFlight = true;
   state.exportMessage = "Preparing export...";
   postStableState("export-preflight");
+  const exportModeSnapshot = exportMode();
+  const audioStreamsBySource = new Map();
   let outputFolder = "";
   try {
     if (!state.ffmpegAvailable || !state.ffmpegPath) {
@@ -2322,6 +2427,15 @@ async function exportStableClips(all, selectedIds, orderedVisibleIds) {
     if (!state.ffmpegAvailable || !state.ffmpegPath) {
       state.lastAction = "ffmpeg not found";
       return buildStableState();
+    }
+
+    if (exportModeSnapshot === "precise") {
+      const sourcePaths = Array.from(new Set(clips.map((clip) => clip.sourceFilePath).filter(Boolean)));
+      for (const clipSourcePath of sourcePaths) {
+        const audioStreams = await probeAudioStreams(clipSourcePath, state.ffmpegPath);
+        if (isDisposed || generation !== exportGeneration) return null;
+        audioStreamsBySource.set(clipSourcePath, audioStreams);
+      }
     }
 
     const outputFolderResult = await resolveBatchOutputFolder();
@@ -2347,7 +2461,6 @@ async function exportStableClips(all, selectedIds, orderedVisibleIds) {
   state.lastError = "";
   state.exportMessage = `Exporting ${clips.length} clip${clips.length === 1 ? "" : "s"}...`;
   postStableState("export-start");
-  const exportModeSnapshot = exportMode();
   const deleteClipsAfterExportSnapshot = deleteClipsAfterExportPreference();
 
   try {
@@ -2376,7 +2489,12 @@ async function exportStableClips(all, selectedIds, orderedVisibleIds) {
       }
       record.exportStatus = STATUS_EXPORTING;
       outputPath = stableOutputPath(clip, index + 1, outputFolder);
-      const plan = stableFfmpegPlan(clip, outputPath, exportModeSnapshot);
+      const plan = stableFfmpegPlan(
+        clip,
+        outputPath,
+        exportModeSnapshot,
+        audioStreamsBySource.get(clip.sourceFilePath)
+      );
       const args = plan.args;
       state.lastAction = `exporting clip ${index + 1}/${clips.length}`;
       postStableState("export-progress");

@@ -1043,8 +1043,8 @@
       <div class="settings-group export-mode">
         <div class="section-heading-with-help">
           <h3 class="settings-group-title">Export mode</h3>
-          <span class="help-icon" tabindex="0" role="button" aria-label="Fast exports without re-encoding when possible. Faster, but cut points may follow keyframes. Precise re-encodes when needed for accurate In and Out points. Slower, but more exact.">?</span>
-          <div class="help-tooltip"><strong>Fast:</strong> exports without re-encoding when possible. Faster, but cut points may follow keyframes.<br><strong>Precise:</strong> re-encodes when needed for accurate In and Out points. Slower, but more exact.</div>
+          <span class="help-icon" tabindex="0" role="button" aria-label="Fast exports without re-encoding when possible. Faster, but cut points may follow keyframes. Precise re-encodes for accurate In and Out points and adapts AAC quality to the source audio when available. Slower, but more exact.">?</span>
+          <div class="help-tooltip"><strong>Fast:</strong> exports without re-encoding when possible. Faster, but cut points may follow keyframes.<br><strong>Precise:</strong> re-encodes for accurate In and Out points and adapts AAC quality to the source audio when available. Slower, but more exact.</div>
         </div>
         <div class="segmented-control" role="radiogroup" aria-label="Export mode">
           <label><input type="radio" name="exportMode" data-pref-key="exportMode" value="fast"> Fast</label>
@@ -1159,7 +1159,7 @@
 
       <div id="output-folder-setting" class="pref-field output-folder-setting">
         <label class="settings-field-title" for="output-folder">Output folder</label>
-        <input id="output-folder" type="text" data-pref-key="outputFolder" placeholder="~/Movies/IINA clips">
+        <input id="output-folder" type="text" data-pref-key="outputFolder" placeholder="~/Desktop">
       </div>
     </div>
   </section>
@@ -1349,7 +1349,7 @@
 
   <script>
     const MODIFIER_ORDER = ["Meta", "Shift", "Alt", "Ctrl"];
-    const DEFAULT_OUTPUT_FOLDER = "~/Movies/IINA clips";
+    const DEFAULT_OUTPUT_FOLDER = "~/Desktop";
     const DEFAULT_SETTINGS = Object.freeze({
       outputFolder: DEFAULT_OUTPUT_FOLDER,
       askWhereToSave: false,

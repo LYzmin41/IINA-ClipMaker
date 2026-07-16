@@ -21,6 +21,7 @@ function createRuntime(options = {}) {
     sourcePath,
     secondSourcePath,
     "/opt/homebrew/bin/ffmpeg",
+    "/opt/homebrew/bin/ffprobe",
   ]);
   const eventHandlers = new Map();
   const sidebarHandlers = new Map();
@@ -49,6 +50,7 @@ function createRuntime(options = {}) {
     if (executable === "/usr/bin/which") {
       const name = args[0];
       if (name === "ffmpeg") return { status: 0, stdout: "/opt/homebrew/bin/ffmpeg\n", stderr: "" };
+      if (name === "ffprobe") return { status: 0, stdout: "/opt/homebrew/bin/ffprobe\n", stderr: "" };
       return { status: 1, stdout: "", stderr: "not found" };
     }
     if (executable === "/usr/bin/osascript") {
@@ -63,6 +65,17 @@ function createRuntime(options = {}) {
     }
     if (executable.endsWith("/ffmpeg") && args[0] === "-version") {
       return { status: 0, stdout: "ffmpeg version 8.1 test\n", stderr: "" };
+    }
+    if (executable.endsWith("/ffprobe")) {
+      return {
+        status: 0,
+        stdout: JSON.stringify({
+          streams: [
+            { codec_name: "aac", bit_rate: "192000", sample_rate: "48000", channels: 2, channel_layout: "stereo" },
+          ],
+        }),
+        stderr: "",
+      };
     }
     if (executable.endsWith("/ffmpeg")) {
       existingFiles.add(args[args.length - 1]);
@@ -343,9 +356,9 @@ test("Show Containing Folder opens the configured folder and remembers a chosen 
   let result = await runtime.callRpc("$showExportFolder");
   let openCalls = runtime.execCalls.filter((call) => call.executable === "/usr/bin/open");
   assert.equal(result.ok, true);
-  assert.equal(result.exportFolder, "/Users/tester/Movies/IINA clips");
-  assert.deepEqual(openCalls[0].args, ["/Users/tester/Movies/IINA clips"]);
-  assert.equal(openCalls[0].cwd, "/Users/tester/Movies/IINA clips");
+  assert.equal(result.exportFolder, "/Users/tester/Desktop");
+  assert.deepEqual(openCalls[0].args, ["/Users/tester/Desktop"]);
+  assert.equal(openCalls[0].cwd, "/Users/tester/Desktop");
 
   const state = runtime.evaluate("state");
   state.lastExportFolder = "/tmp/ClipMaker chosen exports";
@@ -1249,6 +1262,94 @@ test("preview seeks numerically, starts playback, and is cancelled by another ma
   assert.equal(runtime.evaluate("previewStopTimeoutId"), null);
 });
 
+test("adaptive AAC bitrate follows source quality and channel count", (t) => {
+  const runtime = createRuntime();
+  t.after(() => runtime.cleanup());
+  const result = runtime.evaluate(`(() => ({
+    mono64: adaptiveAacBitrateKbps({ codec_name: "aac", bit_rate: 64000, channels: 1 }),
+    monoLossless: adaptiveAacBitrateKbps({ codec_name: "flac", channels: 1 }),
+    stereo96: adaptiveAacBitrateKbps({ codec_name: "aac", bit_rate: 96000, channels: 2 }),
+    stereo128: adaptiveAacBitrateKbps({ codec_name: "aac", bit_rate: 128000, channels: 2 }),
+    stereo192: adaptiveAacBitrateKbps({ codec_name: "aac", bit_rate: 192000, channels: 2 }),
+    stereo256: adaptiveAacBitrateKbps({ codec_name: "aac", bit_rate: 256000, channels: 2 }),
+    stereo320: adaptiveAacBitrateKbps({ codec_name: "aac", bit_rate: 320000, channels: 2 }),
+    stereoLossless: adaptiveAacBitrateKbps({ codec_name: "alac", channels: 2 }),
+    surround384: adaptiveAacBitrateKbps({ codec_name: "ac3", bit_rate: 384000, channels: 6 }),
+    surroundHigh: adaptiveAacBitrateKbps({ codec_name: "truehd", channels: 8 }),
+    unknown: adaptiveAacBitrateKbps({}),
+  }))()`);
+
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), {
+    mono64: 96,
+    monoLossless: 192,
+    stereo96: 128,
+    stereo128: 160,
+    stereo192: 192,
+    stereo256: 256,
+    stereo320: 320,
+    stereoLossless: 320,
+    surround384: 384,
+    surroundHigh: 512,
+    unknown: 192,
+  });
+});
+
+test("Precise probes every audio stream and applies adaptive AAC bitrates", async (t) => {
+  const runtime = createRuntime({
+    async exec(call) {
+      if (call.executable.endsWith("/ffprobe")) {
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            streams: [
+              { codec_name: "aac", bit_rate: "128000", sample_rate: "48000", channels: 2, channel_layout: "stereo" },
+              { codec_name: "ac3", bit_rate: "384000", sample_rate: "48000", channels: 6, channel_layout: "5.1" },
+            ],
+          }),
+          stderr: "",
+        };
+      }
+      return undefined;
+    },
+  });
+  t.after(() => runtime.cleanup());
+  runtime.preferences.set("exportMode", "precise");
+  await runtime.emit("iina.window-loaded");
+  const state = runtime.evaluate("state");
+  state.clips = [{ id: 1, name: "Adaptive", sourceFilePath: runtime.sourcePath, sourceFileDisplayName: "source", inPoint: 2, outPoint: 4, duration: 2, exportStatus: "pending", outputPath: "" }];
+
+  await runtime.callRpc("$exportAll");
+  const probeCall = runtime.execCalls.find((call) => call.executable.endsWith("/ffprobe"));
+  assert.ok(probeCall);
+  assert.ok(probeCall.args.includes("stream=codec_name,bit_rate,sample_rate,channels,channel_layout"));
+  const exportCall = runtime.execCalls.filter((call) => call.executable.endsWith("/ffmpeg") && call.args[0] !== "-version").at(-1);
+  assert.equal(exportCall.args[exportCall.args.indexOf("-b:a:0") + 1], "160k");
+  assert.equal(exportCall.args[exportCall.args.indexOf("-b:a:1") + 1], "384k");
+  assert.equal(exportCall.args.includes("-b:a"), false);
+});
+
+test("Precise falls back to 192 kbps when ffprobe is unavailable", async (t) => {
+  const runtime = createRuntime({
+    async exec(call) {
+      if (call.executable === "/usr/bin/which" && call.args[0] === "ffprobe") {
+        return { status: 1, stdout: "", stderr: "not found" };
+      }
+      return undefined;
+    },
+  });
+  t.after(() => runtime.cleanup());
+  runtime.existingFiles.delete("/opt/homebrew/bin/ffprobe");
+  runtime.preferences.set("exportMode", "precise");
+  await runtime.emit("iina.window-loaded");
+  const state = runtime.evaluate("state");
+  state.clips = [{ id: 1, name: "Fallback", sourceFilePath: runtime.sourcePath, sourceFileDisplayName: "source", inPoint: 2, outPoint: 4, duration: 2, exportStatus: "pending", outputPath: "" }];
+
+  await runtime.callRpc("$exportAll");
+  const exportCall = runtime.execCalls.filter((call) => call.executable.endsWith("/ffmpeg") && call.args[0] !== "-version").at(-1);
+  assert.equal(exportCall.args[exportCall.args.indexOf("-b:a") + 1], "192k");
+  assert.equal(runtime.execCalls.some((call) => call.executable.endsWith("/ffprobe")), false);
+});
+
 test("export snapshots order and titles, keeps modes distinct, and honors reveal preference", async (t) => {
   let firstExportStartedResolve;
   let releaseFirstExport;
@@ -1294,12 +1395,13 @@ test("export snapshots order and titles, keeps modes distinct, and honors reveal
 
   const fastCalls = runtime.execCalls.filter((call) => call.executable.endsWith("/ffmpeg") && call.args[0] !== "-version");
   assert.equal(fastCalls.length, 2);
-  assert.equal(fastCalls[0].args.at(-1), "/Users/tester/Movies/IINA clips/First.mp4");
-  assert.equal(fastCalls[1].args.at(-1), "/Users/tester/Movies/IINA clips/Second.mp4");
+  assert.equal(fastCalls[0].args.at(-1), "/Users/tester/Desktop/First.mp4");
+  assert.equal(fastCalls[1].args.at(-1), "/Users/tester/Desktop/Second.mp4");
   assert.ok(fastCalls.every((call) => call.args[0] === "-n"));
   assert.ok(fastCalls.every((call) => call.args.includes("copy")));
   assert.equal(result.exportMessage, "Export complete: 2/2");
   assert.deepEqual(runtime.revealedPaths, [fastCalls[0].args.at(-1), fastCalls[1].args.at(-1)]);
+  assert.equal(runtime.execCalls.some((call) => call.executable.endsWith("/ffprobe")), false);
 
   runtime.preferences.set("exportMode", "precise");
   state.clips = [{ id: 3, name: "Precise", sourceFilePath: runtime.sourcePath, sourceFileDisplayName: "source", inPoint: 8, outPoint: 9.5, duration: 1.5, exportStatus: "pending", outputPath: "" }];
@@ -1308,6 +1410,7 @@ test("export snapshots order and titles, keeps modes distinct, and honors reveal
   assert.ok(preciseCall.args.includes("libx264"));
   assert.equal(preciseCall.args.includes("copy"), false);
   assert.ok(preciseCall.args.indexOf("-i") < preciseCall.args.indexOf("-ss"));
+  assert.equal(preciseCall.args[preciseCall.args.indexOf("-b:a:0") + 1], "192k");
 });
 
 test("ask-where-to-save opens one picker per batch and cancellation starts no export", async (t) => {

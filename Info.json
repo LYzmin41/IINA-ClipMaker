@@ -20,7 +20,7 @@
   },
   "preferencesPage": "preferences.html",
   "preferenceDefaults": {
-    "outputFolder": "~/Movies/IINA clips",
+    "outputFolder": "~/Desktop",
     "askWhereToSave": false,
     "ffmpegPath": "",
     "container": "source",

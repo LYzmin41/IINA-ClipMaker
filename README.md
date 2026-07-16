@@ -92,9 +92,11 @@ Choosing Custom preserves the complete order from the previous sort and enables 
 
 **Fast** uses FFmpeg stream copy. It is quick and avoids re-encoding, but cut points may align to nearby keyframes and a forced container may not support every source codec.
 
-**Precise** re-encodes video with H.264 and audio with AAC. It is slower, but normally provides more accurate boundaries. MP4 and MOV outputs receive `+faststart`.
+**Precise** re-encodes video with H.264 and audio with AAC. It is slower, but normally provides more accurate boundaries. Video keeps its source dimensions and uses quality-based CRF encoding. AAC bitrate adapts to the source bitrate and channel count when `ffprobe` is available, with a safe 192 kbps fallback. MP4 and MOV outputs receive `+faststart`.
 
 ClipMaker never overwrites an existing file. Conflicting names receive `_02`, `_03`, and so on. Unsafe filename characters are replaced automatically.
+
+On first install, exports use the current user's Desktop by default. This can be replaced with any fixed folder, or with a destination prompt for each batch.
 
 ## Settings
 
