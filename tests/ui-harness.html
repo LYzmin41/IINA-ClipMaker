@@ -1,0 +1,173 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ClipMaker UI Harness</title>
+<script>
+  fetch("/sidebar.html")
+    .then((response) => response.text())
+    .then((source) => {
+      const mock = `<script>
+        (() => {
+          const listeners = new Map();
+          const captureSelectionMotionSamples = (phase) => {
+            if (!new URLSearchParams(window.location.search).has("selectionExitAudit")) return;
+            const sampleStore = phase === "entry" ? "__selectionEntrySamples" : "__selectionExitSamples";
+            const auditId = phase === "entry" ? "selectionEntryAuditSamples" : "selectionExitAuditSamples";
+            window[sampleStore] = [];
+            let auditNode = document.querySelector("#" + auditId);
+            if (!auditNode) {
+              auditNode = document.createElement("div");
+              auditNode.id = auditId;
+              auditNode.hidden = true;
+              document.body.appendChild(auditNode);
+            }
+            const sampleDelays = phase === "entry"
+              ? [0, 110, 220, 320, 420, 500]
+              : [0, 75, 150, 215, 280, 360];
+            sampleDelays.forEach((delayMs) => {
+              setTimeout(() => {
+                const actions = document.querySelector("#selectionActions");
+                const deleteButton = document.querySelector("#deleteSelectedButton");
+                const deleteClip = document.querySelector(".selection-delete-clip");
+                const deselectOccluder = document.querySelector(".selection-clear-occluder");
+                const deselectButton = document.querySelector("#clearSelectionButton");
+                const summary = document.querySelector("#clipsSelectionSummary");
+                window[sampleStore].push({
+                  phase,
+                  delayMs,
+                  actionsClass: actions && actions.className,
+                  deleteOpacity: deleteButton && Number(getComputedStyle(deleteButton).opacity),
+                  deleteTransform: deleteButton && getComputedStyle(deleteButton).transform,
+                  deleteClipPath: deleteClip && getComputedStyle(deleteClip).clipPath,
+                  deleteClipOverflow: deleteClip && getComputedStyle(deleteClip).overflow,
+                  deselectOpacity: deselectButton && Number(getComputedStyle(deselectButton).opacity),
+                  deselectOccluderOpacity: deselectOccluder && Number(getComputedStyle(deselectOccluder).opacity),
+                  summaryOpacity: summary && Number(getComputedStyle(summary).opacity),
+                  summaryWidth: summary && summary.getBoundingClientRect().width,
+                  summaryMaskPosition: summary && (getComputedStyle(summary).webkitMaskPosition || getComputedStyle(summary).maskPosition),
+                  summaryTransform: summary && getComputedStyle(summary).transform,
+                  summaryHidden: summary && summary.hidden
+                });
+                auditNode.dataset.samples = JSON.stringify(window[sampleStore]);
+              }, delayMs);
+            });
+          };
+          const captureSortIconSamples = (targetDirection) => {
+            if (!new URLSearchParams(window.location.search).has("sortIconAudit")) return;
+            let auditNode = document.querySelector("#sortIconAuditSamples");
+            if (!auditNode) {
+              auditNode = document.createElement("div");
+              auditNode.id = "sortIconAuditSamples";
+              auditNode.hidden = true;
+              document.body.appendChild(auditNode);
+            }
+            const samples = [];
+            [0, 45, 90, 170, 210].forEach((delayMs) => {
+              setTimeout(() => {
+                const button = document.querySelector("#clipSortButton");
+                const ascending = document.querySelector(".clip-sort-icon-glyph-ascending");
+                const descending = document.querySelector(".clip-sort-icon-glyph-descending");
+                samples.push({
+                  targetDirection,
+                  delayMs,
+                  buttonClass: button && button.className,
+                  direction: button && button.dataset.sortDirection,
+                  ascendingOpacity: ascending && Number(getComputedStyle(ascending).opacity),
+                  ascendingTransform: ascending && getComputedStyle(ascending).transform,
+                  descendingOpacity: descending && Number(getComputedStyle(descending).opacity),
+                  descendingTransform: descending && getComputedStyle(descending).transform
+                });
+                auditNode.dataset.samples = JSON.stringify(samples);
+              }, delayMs);
+            });
+          };
+          const state = {
+            currentFileName: "Вас снова убили, мистер детектив — 07 серия — финальная режиссерская версия.mp4",
+            currentFilePath: "/tmp/Вас снова убили, мистер детектив — 07 серия — финальная режиссерская версия.mp4",
+            displayFps: 24,
+            fps: 24,
+            fpsText: "24",
+            positionSeconds: 12,
+            durationSeconds: 120 + (7 / 24),
+            inPoint: 1,
+            outPoint: 5,
+            rangeSeconds: 4,
+            canSetMarks: true,
+            canClearMarks: true,
+            canAddClip: true,
+            canClearList: true,
+            canExportAll: true,
+            canExportSelected: true,
+            ffmpegAvailable: true,
+            ffmpegFound: true,
+            exporting: false,
+            selectedClipIds: [2],
+            selectedClipId: 2,
+            clipSortMode: "manual",
+            clipSortDirection: "ascending",
+            clips: [
+              { id: 4, creationSequence: 4, name: "Beta", inPoint: 8, outPoint: 10, duration: 2, selected: false, exportStatus: "pending" },
+              { id: 3, creationSequence: 3, name: "Alpha long", inPoint: 5, outPoint: 9, duration: 4, selected: false, exportStatus: "pending" },
+              { id: 2, creationSequence: 2, name: "Alpha short", inPoint: 3, outPoint: 4, duration: 1, selected: true, exportStatus: "pending" },
+              { id: 1, creationSequence: 1, name: "Gamma", inPoint: 1, outPoint: 3, duration: 2, selected: false, exportStatus: "pending" }
+            ]
+          };
+          window.iina = {
+            onMessage(name, callback) {
+              if (callback == null) listeners.delete(name);
+              else listeners.set(name, callback);
+            },
+            postMessage(name, payload) {
+              const previousSelectedCount = state.selectedClipIds.length;
+              if (name === "#call.$setClipSort") {
+                state.clipSortMode = payload.args[0];
+                state.clipSortDirection = payload.args[1];
+              }
+              if (name === "#call.$setPositionTime") {
+                state.positionSeconds = payload.args[0];
+              }
+              if (name === "#call.$setMarkTime") {
+                const markName = payload.args[0];
+                if (markName === "in") state.inPoint = payload.args[1];
+                if (markName === "out") state.outPoint = payload.args[1];
+                state.rangeSeconds = state.outPoint - state.inPoint;
+              }
+              if (name === "#call.$clearClipSelection") {
+                state.selectedClipIds = [];
+                state.selectedClipId = null;
+                state.clips.forEach((clip) => { clip.selected = false; });
+              }
+              if (name === "#call.$toggleClipSelection") {
+                const clipId = payload.args[0];
+                const clip = state.clips.find((item) => item.id === clipId);
+                if (clip) clip.selected = !clip.selected;
+                state.selectedClipIds = state.clips.filter((item) => item.selected).map((item) => item.id);
+                state.selectedClipId = state.selectedClipIds.length ? state.selectedClipIds.at(-1) : null;
+              }
+              const response = listeners.get(name.replace("#call.", "#on."));
+              if (response) setTimeout(() => response({ res: state }), 0);
+              if (name === "#call.$setClipSort") {
+                setTimeout(() => captureSortIconSamples(state.clipSortDirection), 0);
+              }
+              if (
+                name === "#call.$clearClipSelection"
+                || (name === "#call.$toggleClipSelection" && state.selectedClipIds.length === 0)
+              ) {
+                setTimeout(() => captureSelectionMotionSamples("exit"), 0);
+              } else if (
+                name === "#call.$toggleClipSelection"
+                && previousSelectedCount === 0
+                && state.selectedClipIds.length > 0
+              ) {
+                setTimeout(() => captureSelectionMotionSamples("entry"), 0);
+              }
+            }
+          };
+        })();
+      <\/script>`;
+      document.open();
+      document.write(source
+        .replace("<head>", '<head><base href="/">')
+        .replace('<script src="sidebar.js"></' + 'script>', mock + '<script src="sidebar.js"></' + 'script>'));
+      document.close();
+    });
+</script>

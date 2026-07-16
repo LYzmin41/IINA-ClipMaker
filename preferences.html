@@ -1,0 +1,2300 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ClipMaker Preferences</title>
+  <style>
+    body {
+      --settings-text-primary: rgba(255, 255, 255, 0.94);
+      --settings-text-secondary: rgba(255, 255, 255, 0.84);
+      --settings-text-label: rgba(255, 255, 255, 0.90);
+      --settings-text-muted: rgba(255, 255, 255, 0.48);
+      margin: 0;
+      padding: 16px;
+      font: 13px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      color: var(--settings-text-label);
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    input,
+    textarea,
+    .help-tooltip,
+    .help-tooltip * {
+      -webkit-user-select: text;
+      user-select: text;
+    }
+
+    .pref-section {
+      margin-top: 24px;
+      margin-bottom: 0;
+    }
+
+    .pref-section:first-of-type {
+      margin-top: 0;
+    }
+
+    .section-title,
+    .settings-section-title {
+      margin: 0 0 11px;
+      color: var(--settings-text-primary);
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .settings-section-body {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.055);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.025);
+      box-sizing: border-box;
+    }
+
+    .settings-group {
+      margin-top: 18px;
+    }
+
+    .settings-section-body > .settings-group:first-child {
+      margin-top: 0;
+    }
+
+    .settings-section-title + .settings-group,
+    .section-title + .settings-group {
+      margin-top: 0;
+    }
+
+    .settings-group-title,
+    .gesture-subtitle,
+    .settings-field-title {
+      margin: 0 0 7px;
+      color: var(--settings-text-secondary);
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+
+    .pref-field {
+      margin-top: 16px;
+    }
+
+    .pref-field:first-child {
+      margin-top: 0;
+    }
+
+    .settings-label,
+    label {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--settings-text-label);
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.25;
+    }
+
+    label.settings-field-title {
+      font-weight: 600;
+    }
+
+    .choice-list,
+    .checkbox-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .choice-list label,
+    .checkbox-list label {
+      margin: 0;
+    }
+
+    .label-with-help {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    .label-with-help label {
+      margin-bottom: 0;
+    }
+
+    input[type="text"],
+    select {
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .check label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 500;
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 500;
+      margin-bottom: 0;
+    }
+
+    .output-folder-setting {
+      transition:
+        opacity 160ms cubic-bezier(0.22, 1, 0.36, 1),
+        filter 160ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .output-folder-setting.is-disabled-by-ask-save {
+      opacity: 0.48;
+      filter: saturate(0.72);
+    }
+
+    .output-folder-setting.is-disabled-by-ask-save,
+    .output-folder-setting.is-disabled-by-ask-save * {
+      cursor: default !important;
+    }
+
+    .timecode-gestures .settings-section-body {
+      display: grid;
+      gap: 18px;
+      padding: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.055);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .timecode-mode-group {
+      display: grid;
+      gap: 0;
+      min-width: 0;
+      margin: 0;
+    }
+
+    .timecode-mode-group + .timecode-mode-group {
+      padding-top: 18px;
+      border-top: 1px solid rgba(255, 255, 255, 0.055);
+    }
+
+    .timecode-mode-group .pref-field {
+      margin-top: 0;
+    }
+
+    @media (min-width: 600px) {
+      .export-settings .settings-section-body {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+        column-gap: 24px;
+      }
+
+      .export-settings .settings-group {
+        margin-top: 0;
+      }
+    }
+
+    .sensitivity-control {
+      display: grid;
+      gap: 9px;
+      min-width: 0;
+      margin-top: 14px;
+    }
+
+    .sensitivity-title-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .sensitivity-control-title {
+      display: block;
+      min-width: 0;
+      margin: 0;
+      overflow: hidden;
+      color: rgba(255, 255, 255, 0.90);
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sensitivity-current-value {
+      flex: 0 0 auto;
+      color: rgba(255, 255, 255, 0.50);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .sensitivity-scale {
+      display: grid;
+      grid-template-columns: 32px minmax(0, 1fr) 32px;
+      align-items: center;
+      column-gap: 10px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .sensitivity-scale-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 22px;
+      flex: 0 0 32px;
+      pointer-events: none;
+    }
+
+    .sensitivity-scale-icon img {
+      display: block;
+      width: 28px;
+      height: 20px;
+      object-fit: contain;
+      opacity: 0.52;
+    }
+
+    .sensitivity-scale-icon.is-fast img {
+      opacity: 0.68;
+    }
+
+    .sensitivity-range {
+      --range-progress: 50%;
+      --range-fill-width: calc(50% - (var(--native-range-thumb-width) / 2));
+      --native-range-track-height: 6px;
+      --native-range-thumb-width: 22px;
+      --native-range-thumb-height: 16px;
+      --settings-accent-blue: #0a84ff;
+      --settings-accent-blue-rgb: 10, 132, 255;
+      --native-range-unfilled: rgba(255, 255, 255, 0.16);
+      position: relative;
+      display: flex;
+      align-items: center;
+      width: 100%;
+      min-width: 0;
+      height: 34px;
+      margin: 0;
+    }
+
+    .sensitivity-range::before,
+    .sensitivity-range::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 0;
+      height: var(--native-range-track-height);
+      border-radius: 999px;
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+
+    .sensitivity-range::before {
+      right: calc(var(--native-range-thumb-width) / 2);
+      left: calc(var(--native-range-thumb-width) / 2);
+      background: var(--native-range-unfilled);
+      box-shadow:
+        inset 0 1px 1px rgba(0, 0, 0, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+
+    .sensitivity-range::after {
+      left: calc(var(--native-range-thumb-width) / 2);
+      width: var(--range-fill-width);
+      background: var(--settings-accent-blue);
+    }
+
+    .sensitivity-range-input {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      height: 30px;
+      margin: 0;
+      background: transparent;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      outline: none;
+    }
+
+    .sensitivity-ticks {
+      position: absolute;
+      left: calc(var(--native-range-thumb-width) / 2);
+      right: calc(var(--native-range-thumb-width) / 2);
+      top: 27px;
+      display: flex;
+      justify-content: space-between;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .sensitivity-ticks span {
+      width: 2px;
+      height: 2px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.24);
+    }
+
+    .sensitivity-range-input::-webkit-slider-runnable-track {
+      height: var(--native-range-track-height);
+      border-radius: 999px;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .sensitivity-range-input::-webkit-slider-thumb {
+      appearance: none;
+      -webkit-appearance: none;
+      width: var(--native-range-thumb-width);
+      height: var(--native-range-thumb-height);
+      margin-top: calc((var(--native-range-track-height) - var(--native-range-thumb-height)) / 2);
+      border: 1px solid rgba(0, 0, 0, 0.20);
+      border-radius: 999px;
+      background: linear-gradient(180deg, #ffffff 0%, #f7f7f8 52%, #e5e5e7 100%);
+      box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.38),
+        0 2px 4px rgba(0, 0, 0, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.90);
+      transition:
+        filter 120ms ease,
+        transform 120ms ease,
+        box-shadow 120ms ease;
+    }
+
+    .sensitivity-range-input:hover::-webkit-slider-thumb {
+      filter: brightness(1.025);
+      box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.40),
+        0 3px 6px rgba(0, 0, 0, 0.26),
+        inset 0 1px 0 rgba(255, 255, 255, 0.96);
+    }
+
+    .sensitivity-range-input:active::-webkit-slider-thumb {
+      filter: brightness(0.98);
+      transform: scale(0.98);
+    }
+
+    .sensitivity-range-input:focus-visible::-webkit-slider-thumb {
+      box-shadow:
+        0 0 0 3px rgba(var(--settings-accent-blue-rgb), 0.24),
+        0 1px 2px rgba(0, 0, 0, 0.38),
+        0 2px 4px rgba(0, 0, 0, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.90);
+    }
+
+    .sensitivity-range-input::-moz-range-track {
+      height: var(--native-range-track-height);
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .sensitivity-range-input::-moz-range-progress {
+      height: var(--native-range-track-height);
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+    }
+
+    .sensitivity-range-input::-moz-range-thumb {
+      width: var(--native-range-thumb-width);
+      height: var(--native-range-thumb-height);
+      border: 1px solid rgba(0, 0, 0, 0.20);
+      border-radius: 999px;
+      background: linear-gradient(180deg, #ffffff 0%, #f7f7f8 52%, #e5e5e7 100%);
+      box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.38),
+        0 2px 4px rgba(0, 0, 0, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.90);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .sensitivity-range-input::-webkit-slider-thumb {
+        transition-duration: 0ms;
+      }
+
+      .sensitivity-range-input:active::-webkit-slider-thumb {
+        transform: none;
+      }
+    }
+
+    .segmented-control {
+      display: inline-grid;
+      grid-template-columns: 1fr 1fr;
+      min-width: 190px;
+      padding: 3px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 9px;
+      background: rgba(0, 0, 0, 0.18);
+      gap: 2px;
+    }
+
+    .segmented-control input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .segmented-control label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 26px;
+      margin: 0;
+      padding: 3px 14px;
+      border-radius: 7px;
+      color: -apple-system-secondary-label;
+      font-weight: 600;
+      cursor: default;
+      user-select: none;
+    }
+
+    .segmented-control label:has(input:checked),
+    .segmented-control label.selected {
+      background: rgba(255, 255, 255, 0.16);
+      color: -apple-system-label;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    }
+
+    .export-mode .segmented-control {
+      width: 170px;
+      height: 30px;
+      min-width: 0;
+      padding: 2px;
+      border-radius: 8px;
+      box-sizing: border-box;
+    }
+
+    .export-mode .segmented-control label {
+      min-height: 0;
+      height: 24px;
+      padding: 0 9px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      box-sizing: border-box;
+    }
+
+    .settings-description,
+    .help {
+      margin: 5px 0 0;
+      color: var(--settings-text-muted);
+      font-size: 12px;
+      font-weight: 400;
+      line-height: 1.35;
+    }
+
+    .section-heading-with-help {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-bottom: 7px;
+    }
+
+    .section-heading-with-help h2 {
+      margin: 0;
+    }
+
+    .section-heading-with-help .settings-group-title,
+    .section-heading-with-help .settings-section-title {
+      margin: 0;
+    }
+
+    .section-heading-with-help label {
+      margin: 0;
+      font-weight: 600;
+    }
+
+    .help-icon {
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      flex: 0 0 14px;
+      margin: 0;
+      padding: 0;
+      border: 0.5px solid rgba(255, 255, 255, 0.22);
+      border-radius: 50%;
+      color: rgba(255, 255, 255, 0.48);
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 1;
+      vertical-align: middle;
+      cursor: help;
+      outline: none;
+      opacity: 0.82;
+      user-select: none;
+    }
+
+    .help-icon:focus {
+      border-color: rgba(47, 140, 255, 0.75);
+      box-shadow: 0 0 0 3px rgba(47, 140, 255, 0.16);
+    }
+
+    .help-tooltip {
+      position: fixed;
+      left: var(--help-tooltip-left, 16px);
+      top: var(--help-tooltip-top, 16px);
+      z-index: 10;
+      width: min(260px, calc(100vw - 32px));
+      margin-left: 0;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      background: rgba(22, 22, 24, 0.96);
+      box-sizing: border-box;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
+      color: rgba(255, 255, 255, 0.86);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.35;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(2px);
+      transition: opacity 120ms ease, transform 120ms ease;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .help-tooltip strong {
+      color: -apple-system-label;
+      font-weight: 700;
+    }
+
+    .help-icon:hover + .help-tooltip,
+    .help-icon:focus + .help-tooltip,
+    .help-icon.is-help-active + .help-tooltip,
+    .help-tooltip:hover,
+    .help-tooltip.is-help-active {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    .ffmpeg-help-text {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+      max-width: none;
+    }
+
+    .ffmpeg-help-tooltip {
+      width: min(400px, calc(100vw - 32px));
+    }
+
+    .ffmpeg-help-text p {
+      margin: 0;
+    }
+
+    .ffmpeg-install-command {
+      display: block;
+      width: 100%;
+      margin: 1px 0 0;
+      padding: 6px 8px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      color: -apple-system-label;
+      font: 12px ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      text-align: left;
+      cursor: pointer;
+      box-sizing: border-box;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+      white-space: normal;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .ffmpeg-install-command:hover {
+      border-color: rgba(255, 255, 255, 0.28);
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .ffmpeg-install-command:focus {
+      outline: none;
+      border-color: rgba(56, 189, 248, 0.55);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
+    }
+
+    .ffmpeg-copy-confirmation {
+      min-height: 14px;
+      color: -apple-system-secondary-label;
+      font-size: 11px;
+      opacity: 0;
+      transition: opacity 140ms ease;
+    }
+
+    .ffmpeg-copy-confirmation.is-visible {
+      opacity: 1;
+    }
+
+    .field-warning {
+      min-height: 15px;
+      margin-top: 5px;
+      color: -apple-system-secondary-label;
+      font-size: 12px;
+      line-height: 1.25;
+      opacity: 0;
+      transition: opacity 140ms ease;
+    }
+
+    .field-warning.is-visible {
+      opacity: 1;
+    }
+
+    .shortcut-heading {
+      display: flex;
+      width: 100%;
+      margin-bottom: 11px;
+    }
+
+    .shortcut-heading .help-tooltip {
+      left: var(--help-tooltip-left, 16px);
+      right: auto;
+      top: var(--help-tooltip-top, 16px);
+      width: calc(100% - 24px);
+      max-width: 300px;
+      box-sizing: border-box;
+      transform: translateY(2px);
+    }
+
+    .shortcut-heading .help-icon:hover + .help-tooltip,
+    .shortcut-heading .help-icon:focus + .help-tooltip {
+      transform: translateY(0);
+    }
+
+    .checkbox-with-help {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      max-width: 100%;
+      margin-bottom: 0;
+    }
+
+    .check .checkbox-with-help label {
+      margin-bottom: 0;
+      white-space: nowrap;
+    }
+
+    .checkbox-with-help .help-tooltip {
+      left: var(--help-tooltip-left, 16px);
+      right: auto;
+      top: auto;
+      top: var(--help-tooltip-top, 16px);
+      bottom: auto;
+      width: min(260px, calc(100vw - 32px));
+      margin-left: 0;
+      padding: 8px 10px;
+      font-size: 12px;
+      line-height: 1.3;
+      transform: translateY(2px);
+    }
+
+    .checkbox-with-help .help-icon:hover + .help-tooltip,
+    .checkbox-with-help .help-icon:focus + .help-tooltip {
+      transform: translateY(0);
+    }
+
+    .export-mode .section-heading-with-help {
+      display: flex;
+      width: max-content;
+      margin-bottom: 6px;
+    }
+
+    @media (max-width: 640px) {
+      .shortcut-heading .help-tooltip {
+        left: var(--help-tooltip-left, 16px);
+        right: auto;
+        top: var(--help-tooltip-top, 16px);
+        width: calc(100% - 16px);
+        max-width: 300px;
+      }
+    }
+
+    .shortcuts-section {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      margin-top: 0;
+    }
+
+    .shortcut-row {
+      display: flex !important;
+      flex-direction: row !important;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .shortcut-label {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin: 0;
+      font-weight: 500;
+    }
+
+    .shortcut-control {
+      flex: 0 0 150px;
+      width: 150px;
+      margin-left: auto;
+    }
+
+    .shortcut-input {
+      width: 150px !important;
+      max-width: 150px !important;
+      min-height: 26px;
+      height: 26px;
+      padding: 2px 8px;
+      box-sizing: border-box;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(0, 0, 0, 0.18);
+      color: rgba(255, 255, 255, 0.92);
+      font: inherit;
+      font-size: 12px;
+      line-height: 1;
+      font-weight: 600;
+      text-align: right;
+      outline: none;
+    }
+
+    .shortcut-input:focus {
+      border-color: rgba(47, 140, 255, 0.75);
+      box-shadow: 0 0 0 3px rgba(47, 140, 255, 0.18);
+      background: rgba(0, 0, 0, 0.24);
+    }
+
+    .shortcut-input.recording {
+      border-color: rgba(47, 140, 255, 0.8);
+      box-shadow: 0 0 0 3px rgba(47, 140, 255, 0.18);
+      background: rgba(0, 0, 0, 0.24);
+    }
+
+    .shortcut-input::placeholder {
+      color: rgba(255, 255, 255, 0.35);
+    }
+
+    .shortcut-input.invalid,
+    .shortcut-input.conflict {
+      border-color: rgba(255, 92, 108, 0.8);
+      background: rgba(255, 92, 108, 0.10);
+    }
+
+    .shortcut-input.invalid:focus,
+    .shortcut-input.conflict:focus,
+    .shortcut-input.invalid.recording,
+    .shortcut-input.conflict.recording {
+      box-shadow: 0 0 0 3px rgba(255, 92, 108, 0.18);
+    }
+
+    .shortcut-warning {
+      display: none;
+      color: #ff8a95;
+      font-size: 11px;
+      line-height: 1.25;
+      margin-top: 4px;
+    }
+
+    .shortcut-control.has-warning .shortcut-warning {
+      display: block;
+    }
+
+    @media (max-width: 360px) {
+      .shortcut-row {
+        flex-direction: column !important;
+        align-items: stretch;
+      }
+
+      .shortcut-control,
+      .shortcut-input {
+        width: 100% !important;
+        max-width: none !important;
+      }
+    }
+
+    .reset-settings-area {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 30px;
+      margin-bottom: 22px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .reset-settings-button {
+      flex: 0 0 auto;
+      height: 31px;
+      padding: 0 13px;
+      border: 1px solid rgba(255, 69, 58, 0.38);
+      border-radius: 7px;
+      background: rgba(255, 69, 58, 0.16);
+      color: rgb(255, 105, 97);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition:
+        background-color 120ms ease,
+        border-color 120ms ease,
+        box-shadow 120ms ease;
+    }
+
+    .reset-settings-button:hover {
+      background: rgba(255, 69, 58, 0.23);
+      border-color: rgba(255, 69, 58, 0.55);
+    }
+
+    .reset-settings-button:active {
+      background: rgba(255, 69, 58, 0.30);
+    }
+
+    .reset-settings-button:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(255, 69, 58, 0.22);
+    }
+
+    .reset-settings-button:disabled {
+      cursor: default;
+      opacity: 0.55;
+    }
+
+    .reset-settings-status {
+      color: -apple-system-secondary-label;
+      font-size: 12px;
+      line-height: 1.25;
+      opacity: 0;
+      transition: opacity 140ms ease;
+    }
+
+    .reset-settings-status.is-visible {
+      opacity: 1;
+    }
+
+    .reset-settings-status.is-error {
+      color: rgb(255, 105, 97);
+    }
+
+    .reset-dialog-backdrop[hidden] {
+      display: none;
+    }
+
+    .reset-dialog-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: block;
+      overflow: visible;
+      background: transparent;
+      pointer-events: none;
+    }
+
+    .reset-dialog {
+      position: fixed;
+      left: var(--reset-dialog-left, 10px);
+      top: var(--reset-dialog-top, 10px);
+      width: min(300px, calc(100vw - 20px));
+      padding: 11px 12px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 16px;
+      background: rgba(20, 20, 24, 0.97);
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
+      box-sizing: border-box;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(-8px) scale(0.96);
+      transform-origin: left center;
+      transition:
+        opacity 180ms ease,
+        transform 180ms cubic-bezier(0.25, 0.1, 0.25, 1);
+    }
+
+    .reset-dialog.is-open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(0) scale(1);
+    }
+
+    .reset-dialog::before {
+      content: "";
+      position: absolute;
+      left: -14px;
+      top: var(--reset-dialog-tail-top, 15px);
+      width: 7px;
+      height: 7px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 999px;
+      background: rgba(20, 20, 24, 0.97);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+      transform: scale(0.9);
+      transition: transform 180ms cubic-bezier(0.25, 0.1, 0.25, 1);
+    }
+
+    .reset-dialog.is-open::before {
+      transform: scale(1);
+    }
+
+    .reset-dialog.is-below {
+      transform: translateY(-4px);
+    }
+
+    .reset-dialog.is-below.is-open {
+      transform: translateY(0);
+    }
+
+    .reset-dialog.is-below::before {
+      left: var(--reset-dialog-tail-left, 18px);
+      top: -14px;
+    }
+
+    .reset-dialog-title {
+      margin: 0;
+      color: var(--settings-text-primary);
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.25;
+      text-align: center;
+    }
+
+    .reset-dialog-message {
+      margin: 7px 2px 10px;
+      color: var(--settings-text-secondary);
+      font-size: 12px;
+      line-height: 1.35;
+      text-align: center;
+    }
+
+    .reset-dialog-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+    }
+
+    .reset-dialog-action {
+      height: 30px;
+      padding: 0 12px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--settings-text-primary);
+      font: inherit;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .reset-dialog-action:hover {
+      background: rgba(255, 255, 255, 0.13);
+    }
+
+    .reset-dialog-action:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(47, 140, 255, 0.22);
+    }
+
+    .reset-dialog-action.is-destructive {
+      border-color: rgba(255, 69, 58, 0.42);
+      background: rgba(255, 69, 58, 0.18);
+      color: rgb(255, 105, 97);
+    }
+
+    .reset-dialog-action.is-destructive:hover {
+      background: rgba(255, 69, 58, 0.27);
+    }
+
+    .reset-dialog-action.is-destructive:focus-visible {
+      box-shadow: 0 0 0 3px rgba(255, 69, 58, 0.22);
+    }
+
+    .reset-dialog-action:disabled {
+      cursor: default;
+      opacity: 0.55;
+    }
+  </style>
+</head>
+<body>
+  <section class="pref-section settings-section check export-settings">
+    <h2 class="settings-section-title">Export</h2>
+    <div class="settings-section-body">
+      <div class="settings-group">
+        <h3 class="settings-group-title">Container</h3>
+        <div class="choice-list">
+          <label><input type="radio" name="container" data-pref-key="container" value="source"> Same as source</label>
+          <label><input type="radio" name="container" data-pref-key="container" value="mp4"> MP4</label>
+          <label><input type="radio" name="container" data-pref-key="container" value="mov"> MOV</label>
+          <label><input type="radio" name="container" data-pref-key="container" value="mkv"> MKV</label>
+        </div>
+      </div>
+
+      <div class="settings-group export-mode">
+        <div class="section-heading-with-help">
+          <h3 class="settings-group-title">Export mode</h3>
+          <span class="help-icon" tabindex="0" role="button" aria-label="Fast exports without re-encoding when possible. Faster, but cut points may follow keyframes. Precise re-encodes when needed for accurate In and Out points. Slower, but more exact.">?</span>
+          <div class="help-tooltip"><strong>Fast:</strong> exports without re-encoding when possible. Faster, but cut points may follow keyframes.<br><strong>Precise:</strong> re-encodes when needed for accurate In and Out points. Slower, but more exact.</div>
+        </div>
+        <div class="segmented-control" role="radiogroup" aria-label="Export mode">
+          <label><input type="radio" name="exportMode" data-pref-key="exportMode" value="fast"> Fast</label>
+          <label><input type="radio" name="exportMode" data-pref-key="exportMode" value="precise"> Precise</label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pref-section settings-section check timecode-gestures">
+    <h2 class="settings-section-title">Timecode gestures</h2>
+    <div class="settings-section-body">
+      <div class="timecode-mode-group scrolling">
+        <h3 class="gesture-subtitle">Scrolling</h3>
+        <div class="pref-field">
+          <label class="checkbox-row"><input type="checkbox" data-type="bool" data-pref-key="invertTimecodeScrolling"> Invert timecode scrolling</label>
+          <p class="settings-description">Reverses horizontal scrolling over In and Out timecodes.</p>
+        </div>
+
+        <div class="sensitivity-control">
+          <div class="sensitivity-title-row">
+            <label class="sensitivity-control-title" for="timecode-scroll-sensitivity">Timecode scroll sensitivity</label>
+          </div>
+          <div class="sensitivity-scale">
+            <span class="sensitivity-scale-icon" aria-hidden="true"><img src="assets/tortoise.svg" alt=""></span>
+            <div class="sensitivity-range" data-slider="scroll-sensitivity">
+              <input id="timecode-scroll-sensitivity" class="sensitivity-slider sensitivity-range-input" type="range" data-pref-key="timecodeScrollSensitivity" min="1" max="5" step="1" value="3" aria-label="Timecode scroll sensitivity">
+              <span class="sensitivity-ticks" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
+            </div>
+            <span class="sensitivity-scale-icon is-fast" aria-hidden="true"><img src="assets/hare.svg" alt=""></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="timecode-mode-group dragging">
+        <h3 class="gesture-subtitle">Dragging</h3>
+        <div class="pref-field">
+          <label class="checkbox-row"><input type="checkbox" data-type="bool" data-pref-key="invertTimecodeDragging"> Invert timecode dragging</label>
+          <p class="settings-description">Reverses horizontal dragging over In and Out timecodes.</p>
+        </div>
+
+        <div class="sensitivity-control">
+          <div class="sensitivity-title-row">
+            <label class="sensitivity-control-title" for="timecode-drag-sensitivity">Timecode drag sensitivity</label>
+          </div>
+          <div class="sensitivity-scale">
+            <span class="sensitivity-scale-icon" aria-hidden="true"><img src="assets/tortoise.svg" alt=""></span>
+            <div class="sensitivity-range" data-slider="drag-sensitivity">
+              <input id="timecode-drag-sensitivity" class="sensitivity-slider sensitivity-range-input" type="range" data-pref-key="timecodeDragSensitivity" min="1" max="5" step="1" value="3" aria-label="Timecode drag sensitivity">
+              <span class="sensitivity-ticks" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
+            </div>
+            <span class="sensitivity-scale-icon is-fast" aria-hidden="true"><img src="assets/hare.svg" alt=""></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    (function () {
+      var inputs = document.querySelectorAll(".sensitivity-slider");
+
+      function paintSensitivityTrack(input) {
+        var slider = input && input.parentNode;
+        if (!slider || !slider.classList || !slider.classList.contains("sensitivity-range")) return;
+        var min = parseFloat(input.min);
+        var max = parseFloat(input.max);
+        var value = parseFloat(input.value);
+        var progress = isFinite(min) && isFinite(max) && isFinite(value) && max > min
+          ? Math.max(0, Math.min(1, (value - min) / (max - min)))
+          : 0;
+        var thumbWidth = parseFloat(getComputedStyle(slider).getPropertyValue("--native-range-thumb-width")) || 22;
+        slider.style.setProperty("--range-progress", (progress * 100) + "%");
+        slider.style.setProperty("--range-fill-width", "calc(" + (progress * 100) + "% - " + (progress * thumbWidth) + "px)");
+      }
+
+      function paintAllSensitivityTracks() {
+        for (var index = 0; index < inputs.length; index += 1) {
+          paintSensitivityTrack(inputs[index]);
+        }
+      }
+
+      for (var index = 0; index < inputs.length; index += 1) {
+        inputs[index].addEventListener("input", paintAllSensitivityTracks, false);
+        inputs[index].addEventListener("change", paintAllSensitivityTracks, false);
+      }
+      paintAllSensitivityTracks();
+    }());
+  </script>
+
+  <section class="pref-section settings-section check">
+    <h2 class="settings-section-title">Plugin behavior</h2>
+    <div class="settings-section-body checkbox-list">
+      <label><input type="checkbox" data-type="bool" data-pref-key="addNewClipsToTop"> Add new clips to top</label>
+      <label><input type="checkbox" data-type="bool" data-pref-key="revealAfterExport"> Reveal clip after export in Finder</label>
+      <label><input type="checkbox" data-type="bool" data-pref-key="deleteClipsAfterExport"> Delete clips after export</label>
+      <label><input type="checkbox" data-type="bool" data-pref-key="deleteWithoutConfirmation"> Delete without confirmation</label>
+      <div class="checkbox-with-help">
+        <label><input type="checkbox" data-type="bool" data-pref-key="showSidebarOnInvalidExport"> Show sidebar on error</label>
+        <span class="help-icon" tabindex="0" role="button" aria-label="Opens ClipMaker automatically if you try to export without a valid clip.">?</span>
+        <div class="help-tooltip">Opens ClipMaker automatically if you try to export without a valid clip.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pref-section settings-section naming-paths">
+    <h2 class="settings-section-title">Export location</h2>
+    <div class="settings-section-body">
+      <div class="pref-field">
+        <label class="checkbox-row"><input id="ask-where-to-save" type="checkbox" data-type="bool" data-pref-key="askWhereToSave"> Ask where to save</label>
+      </div>
+
+      <div id="output-folder-setting" class="pref-field output-folder-setting">
+        <label class="settings-field-title" for="output-folder">Output folder</label>
+        <input id="output-folder" type="text" data-pref-key="outputFolder" placeholder="~/Movies/IINA clips">
+      </div>
+    </div>
+  </section>
+
+  <section class="pref-section settings-section ffmpeg-settings">
+    <h2 class="settings-section-title">FFmpeg</h2>
+    <div class="settings-section-body">
+      <div class="pref-field">
+        <div class="label-with-help">
+          <label class="settings-field-title" for="ffmpeg-path">FFmpeg path</label>
+          <span class="help-icon" tabindex="0" role="button" aria-label="FFmpeg installation help">?</span>
+          <div class="help-tooltip ffmpeg-help-tooltip">
+            <div class="ffmpeg-help-text">
+              <p>FFmpeg is required to export clips.</p>
+              <p>1. Install Homebrew:</p>
+              <button class="ffmpeg-install-command" type="button" aria-label="Copy Homebrew install command" data-copy-command='/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'>/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</button>
+              <p>2. Install FFmpeg:</p>
+              <button class="ffmpeg-install-command" type="button" aria-label="Copy FFmpeg install command" data-copy-command="brew install ffmpeg">brew install ffmpeg</button>
+              <div class="ffmpeg-copy-confirmation" aria-live="polite"></div>
+              <p>3. Restart IINA.</p>
+            </div>
+          </div>
+        </div>
+        <input id="ffmpeg-path" type="text" data-pref-key="ffmpegPath" placeholder="FFmpeg not found" autocomplete="off" spellcheck="false">
+        <div id="ffmpeg-path-warning" class="field-warning" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    (function () {
+      var buttons = document.querySelectorAll(".ffmpeg-install-command");
+      var confirmation = document.querySelector(".ffmpeg-copy-confirmation");
+      var confirmationTimer = null;
+
+      function showCopyResult(success) {
+        if (!confirmation) return;
+        window.clearTimeout(confirmationTimer);
+        confirmation.textContent = success ? "Copied" : "Could not copy";
+        confirmation.classList.add("is-visible");
+        confirmationTimer = window.setTimeout(function () {
+          confirmation.classList.remove("is-visible");
+        }, 1200);
+      }
+
+      function fallbackCopy(text) {
+        var textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.setAttribute("readonly", "");
+        textArea.style.position = "fixed";
+        textArea.style.opacity = "0";
+        document.body.appendChild(textArea);
+        textArea.select();
+        var copied = document.execCommand("copy");
+        document.body.removeChild(textArea);
+        return copied;
+      }
+
+      function copyCommand(text, sourceButton) {
+        var copied = false;
+        try {
+          copied = fallbackCopy(text);
+        } catch (error) {
+          copied = false;
+        }
+        if (sourceButton && sourceButton.focus) sourceButton.focus();
+        if (copied) {
+          showCopyResult(true);
+          return;
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () {
+            showCopyResult(true);
+          }, function () {
+            showCopyResult(false);
+          });
+          return;
+        }
+        showCopyResult(false);
+      }
+
+      for (var index = 0; index < buttons.length; index += 1) {
+        buttons[index].addEventListener("click", function () {
+          copyCommand(this.getAttribute("data-copy-command") || this.textContent || "", this);
+        }, false);
+      }
+    }());
+  </script>
+
+  <section class="pref-section settings-section shortcuts">
+    <div class="section-heading-with-help shortcut-heading">
+      <h2 class="settings-section-title">Shortcuts</h2>
+      <span class="help-icon" tabindex="0" role="button" aria-label="Click a field and press a key combination. Leave empty to disable.">?</span>
+      <div class="help-tooltip">Click a field and press a key combination.<br>Leave empty to disable.</div>
+    </div>
+
+    <!-- Shortcuts: one-row label/input layout -->
+    <div class="settings-section-body shortcuts-section">
+      <div class="shortcut-row">
+        <label class="shortcut-label" for="shortcutShowPanel">Show ClipMaker Panel</label>
+        <div class="shortcut-control">
+          <input id="shortcutShowPanel" data-pref-key="shortcutShowPanel" class="shortcut-input" type="text" placeholder="Meta+Shift+C">
+          <div class="shortcut-warning"></div>
+        </div>
+      </div>
+
+      <div class="shortcut-row">
+        <label class="shortcut-label" for="shortcutSetIn">Set In Point</label>
+        <div class="shortcut-control">
+          <input id="shortcutSetIn" data-pref-key="shortcutSetIn" class="shortcut-input" type="text" placeholder="Meta+Shift+I">
+          <div class="shortcut-warning"></div>
+        </div>
+      </div>
+
+      <div class="shortcut-row">
+        <label class="shortcut-label" for="shortcutSetOut">Set Out Point</label>
+        <div class="shortcut-control">
+          <input id="shortcutSetOut" data-pref-key="shortcutSetOut" class="shortcut-input" type="text" placeholder="Meta+Shift+O">
+          <div class="shortcut-warning"></div>
+        </div>
+      </div>
+
+      <div class="shortcut-row">
+        <label class="shortcut-label" for="shortcutAddClip">Add Clip from In/Out</label>
+        <div class="shortcut-control">
+          <input id="shortcutAddClip" data-pref-key="shortcutAddClip" class="shortcut-input" type="text" placeholder="Meta+Shift+A">
+          <div class="shortcut-warning"></div>
+        </div>
+      </div>
+
+      <div class="shortcut-row">
+        <label class="shortcut-label" for="shortcutExportSelected">Export Selected Clip</label>
+        <div class="shortcut-control">
+          <input id="shortcutExportSelected" data-pref-key="shortcutExportSelected" class="shortcut-input" type="text" placeholder="Meta+Shift+E">
+          <div class="shortcut-warning"></div>
+        </div>
+      </div>
+
+      <div class="shortcut-row">
+        <label class="shortcut-label" for="shortcutExportAll">Export All Clips</label>
+        <div class="shortcut-control">
+          <input id="shortcutExportAll" data-pref-key="shortcutExportAll" class="shortcut-input" type="text" placeholder="Meta+Shift+Alt+E">
+          <div class="shortcut-warning"></div>
+        </div>
+      </div>
+
+      <div class="shortcut-row">
+        <label class="shortcut-label" for="shortcutClearMarks">Clear Current Marks</label>
+        <div class="shortcut-control">
+          <input id="shortcutClearMarks" data-pref-key="shortcutClearMarks" class="shortcut-input" type="text" placeholder="Meta+Shift+K">
+          <div class="shortcut-warning"></div>
+        </div>
+      </div>
+
+      <div class="shortcut-row">
+        <label class="shortcut-label" for="shortcutClearList">Clear Clip List</label>
+        <div class="shortcut-control">
+          <input id="shortcutClearList" data-pref-key="shortcutClearList" class="shortcut-input" type="text" placeholder="Meta+Shift+Alt+K">
+          <div class="shortcut-warning"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="reset-settings-area">
+    <button id="reset-settings-button" class="reset-settings-button" type="button">Reset Settings…</button>
+    <span id="reset-settings-status" class="reset-settings-status" role="status" aria-live="polite"></span>
+  </div>
+
+  <div id="reset-settings-dialog-backdrop" class="reset-dialog-backdrop" aria-hidden="true" hidden>
+    <div
+      id="reset-settings-dialog"
+      class="reset-dialog"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="reset-settings-dialog-title"
+      aria-describedby="reset-settings-dialog-message"
+    >
+      <h2 id="reset-settings-dialog-title" class="reset-dialog-title">Reset all settings?</h2>
+      <p id="reset-settings-dialog-message" class="reset-dialog-message">This will restore all ClipMaker settings to their defaults. Your clips and current In/Out points will not be removed.</p>
+      <div class="reset-dialog-actions">
+        <button id="reset-settings-cancel" class="reset-dialog-action" type="button">Cancel</button>
+        <button id="reset-settings-confirm" class="reset-dialog-action is-destructive" type="button">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const MODIFIER_ORDER = ["Meta", "Shift", "Alt", "Ctrl"];
+    const DEFAULT_OUTPUT_FOLDER = "~/Movies/IINA clips";
+    const DEFAULT_SETTINGS = Object.freeze({
+      outputFolder: DEFAULT_OUTPUT_FOLDER,
+      askWhereToSave: false,
+      ffmpegPath: "",
+      container: "source",
+      exportMode: "fast",
+      invertTimecodeScrolling: false,
+      invertTimecodeDragging: false,
+      timecodeScrollSensitivity: 3,
+      timecodeDragSensitivity: 3,
+      clipSortMode: "manual",
+      clipSortDirection: "ascending",
+      addNewClipsToTop: true,
+      revealAfterExport: true,
+      deleteClipsAfterExport: false,
+      deleteWithoutConfirmation: false,
+      showSidebarOnInvalidExport: true,
+      shortcutShowPanel: "Meta+Shift+C",
+      shortcutSetIn: "Meta+Shift+I",
+      shortcutSetOut: "Meta+Shift+O",
+      shortcutAddClip: "Meta+Shift+A",
+      shortcutExportSelected: "Meta+Shift+E",
+      shortcutExportAll: "Meta+Shift+Alt+E",
+      shortcutClearMarks: "Meta+Shift+K",
+      shortcutClearList: "Meta+Shift+Alt+K"
+    });
+    const LEGACY_SOURCE_CONTAINER_VALUES = [
+      "",
+      "source",
+      "original",
+      "original-extension",
+      "original_extension",
+      "originalextension",
+      "same-as-source",
+      "same_as_source",
+      "same-as-original"
+    ];
+    const MODIFIER_ALIASES = {
+      meta: "Meta",
+      cmd: "Meta",
+      command: "Meta",
+      shift: "Shift",
+      alt: "Alt",
+      option: "Alt",
+      ctrl: "Ctrl",
+      control: "Ctrl"
+    };
+
+    const shortcutInputs = Array.prototype.slice.call(document.querySelectorAll(".shortcut-input"));
+    const containerInputs = Array.prototype.slice.call(document.querySelectorAll("input[name='container']"));
+    const exportModeInputs = Array.prototype.slice.call(document.querySelectorAll("input[name='exportMode']"));
+    const sensitivityInputs = Array.prototype.slice.call(document.querySelectorAll(".sensitivity-slider"));
+    const helpIcons = Array.prototype.slice.call(document.querySelectorAll(".help-icon"));
+    const askWhereToSaveCheckbox = document.getElementById("ask-where-to-save");
+    const outputFolderSetting = document.getElementById("output-folder-setting");
+    const outputFolderInput = document.getElementById("output-folder");
+    const ffmpegPathInput = document.getElementById("ffmpeg-path");
+    const ffmpegPathWarning = document.getElementById("ffmpeg-path-warning");
+    const resetSettingsButton = document.getElementById("reset-settings-button");
+    const resetSettingsStatus = document.getElementById("reset-settings-status");
+    const resetSettingsDialogBackdrop = document.getElementById("reset-settings-dialog-backdrop");
+    const resetSettingsDialog = document.getElementById("reset-settings-dialog");
+    const resetSettingsCancel = document.getElementById("reset-settings-cancel");
+    const resetSettingsConfirm = document.getElementById("reset-settings-confirm");
+    let activeHelpIcon = null;
+    let helpTooltipCloseTimer = null;
+    let ffmpegPathCommittedValue = "";
+    let resetStatusTimer = null;
+    let resetConfirmationOpen = false;
+    let resetInFlight = false;
+    let resetDialogHideTimer = null;
+    const SENSITIVITY_LABELS = {
+      1: "Low",
+      2: "Medium",
+      3: "Default",
+      4: "High",
+      5: "Very High"
+    };
+
+    function normalizeContainerPreferenceValue(value) {
+      const text = String(value || "").trim().toLowerCase();
+      if (LEGACY_SOURCE_CONTAINER_VALUES.includes(text)) return "source";
+      if (text === "mp4" || text === "mov" || text === "mkv") return text;
+      return "source";
+    }
+
+    function migrateContainerPreference() {
+      if (!window.iina || !window.iina.preferences || !window.iina.preferences.get || !window.iina.preferences.set) {
+        return;
+      }
+
+      const current = window.iina.preferences.get("container");
+      const normalized = normalizeContainerPreferenceValue(current);
+      if (current !== normalized) {
+        window.iina.preferences.set("container", normalized);
+      }
+      containerInputs.forEach((input) => {
+        input.checked = input.value === normalized;
+      });
+    }
+
+    function normalizeExportModePreference(value) {
+      const text = String(value || "").trim().toLowerCase();
+      if (text === "precise" || text === "reencode" || text === "re-encode") return "precise";
+      return "fast";
+    }
+
+    function normalizeSensitivityLevel(value) {
+      const parsed = Math.round(Number(value));
+      if (!Number.isFinite(parsed)) return 3;
+      return Math.min(5, Math.max(1, parsed));
+    }
+
+    function renderSensitivityInput(input) {
+      if (!input || !input.dataset) return;
+      const key = input.dataset.prefKey;
+      const level = normalizeSensitivityLevel(input.value);
+      const label = SENSITIVITY_LABELS[level] || SENSITIVITY_LABELS[3];
+      const min = Number(input.min);
+      const max = Number(input.max);
+      const progress = Number.isFinite(min) && Number.isFinite(max) && max > min
+        ? ((level - min) / (max - min)) * 100
+        : 0;
+      const slider = input.parentElement;
+      if (slider && slider.classList.contains("sensitivity-range")) {
+        const thumbWidth = parseFloat(getComputedStyle(slider).getPropertyValue("--native-range-thumb-width")) || 22;
+        const progressRatio = progress / 100;
+        slider.style.setProperty("--range-progress", `${progress}%`);
+        slider.style.setProperty("--range-fill-width", `calc(${progress}% - ${progressRatio * thumbWidth}px)`);
+      }
+      input.setAttribute("aria-valuenow", String(level));
+      input.setAttribute("aria-valuetext", label);
+    }
+
+    function updateSensitivityInput(input, persist) {
+      if (!input || !input.dataset) return;
+      const key = input.dataset.prefKey;
+      const storedValue = window.iina && window.iina.preferences && window.iina.preferences.get
+        ? window.iina.preferences.get(key)
+        : input.value;
+      const level = normalizeSensitivityLevel(persist ? input.value : storedValue);
+      const storedLevel = normalizeSensitivityLevel(storedValue);
+      input.value = String(level);
+      renderSensitivityInput(input);
+      if (persist && storedLevel !== level && window.iina && window.iina.preferences && window.iina.preferences.set) {
+        window.iina.preferences.set(key, level);
+      }
+    }
+
+    function syncSensitivityInputs() {
+      sensitivityInputs.forEach((input) => updateSensitivityInput(input, false));
+    }
+
+    function migrateExportModePreference() {
+      if (!window.iina || !window.iina.preferences || !window.iina.preferences.get || !window.iina.preferences.set) {
+        return;
+      }
+
+      const current = window.iina.preferences.get("exportMode");
+      const normalized = normalizeExportModePreference(current);
+
+      if (current !== normalized) {
+        window.iina.preferences.set("exportMode", normalized);
+      }
+
+      exportModeInputs.forEach((input) => {
+        input.checked = input.value === normalized;
+      });
+      updateExportModeSelection();
+    }
+
+    function selectedExportMode() {
+      const selected = exportModeInputs.find((input) => input.checked);
+      return normalizeExportModePreference(selected ? selected.value : "fast");
+    }
+
+    function updateExportModeSelection() {
+      const mode = selectedExportMode();
+      exportModeInputs.forEach((input) => {
+        const label = input.closest("label");
+        if (label) label.classList.toggle("selected", input.value === mode);
+      });
+    }
+
+    function persistExportModeSelection() {
+      const mode = selectedExportMode();
+      const storedMode = normalizeExportModePreference(preferenceGet("exportMode", "fast"));
+      if (storedMode !== mode && window.iina && window.iina.preferences && window.iina.preferences.set) {
+        window.iina.preferences.set("exportMode", mode);
+      }
+      updateExportModeSelection();
+    }
+
+    function booleanPreferenceValue(value, fallback) {
+      if (typeof value === "boolean") return value;
+      if (value === "true") return true;
+      if (value === "false") return false;
+      return Boolean(fallback);
+    }
+
+    function currentAskWhereToSave() {
+      if (!window.iina || !window.iina.preferences || !window.iina.preferences.get) {
+        return Boolean(askWhereToSaveCheckbox && askWhereToSaveCheckbox.checked);
+      }
+      return booleanPreferenceValue(window.iina.preferences.get("askWhereToSave"), false);
+    }
+
+    function updateAskWhereToSaveState(persist) {
+      if (!askWhereToSaveCheckbox) return;
+      const enabled = persist ? Boolean(askWhereToSaveCheckbox.checked) : currentAskWhereToSave();
+      askWhereToSaveCheckbox.checked = enabled;
+      if (persist && currentAskWhereToSave() !== enabled && window.iina && window.iina.preferences && window.iina.preferences.set) {
+        window.iina.preferences.set("askWhereToSave", enabled);
+      }
+      if (outputFolderSetting) {
+        outputFolderSetting.classList.toggle("is-disabled-by-ask-save", enabled);
+        outputFolderSetting.setAttribute("aria-disabled", enabled ? "true" : "false");
+      }
+      if (outputFolderInput) {
+        outputFolderInput.disabled = enabled;
+        if (enabled) {
+          outputFolderInput.setAttribute("tabindex", "-1");
+        } else {
+          outputFolderInput.removeAttribute("tabindex");
+        }
+      }
+    }
+
+    function preferenceGet(key, fallback) {
+      if (!window.iina || !window.iina.preferences || !window.iina.preferences.get) return fallback;
+      const value = window.iina.preferences.get(key);
+      return value === undefined || value === null ? fallback : value;
+    }
+
+    function preferenceSet(key, value) {
+      if (window.iina && window.iina.preferences && window.iina.preferences.set) {
+        window.iina.preferences.set(key, value);
+      }
+    }
+
+    function preferenceSetOrThrow(key, value) {
+      if (!window.iina || !window.iina.preferences || !window.iina.preferences.set || !window.iina.preferences.get) {
+        throw new Error("ClipMaker preferences are unavailable");
+      }
+      window.iina.preferences.set(key, value);
+      const storedValue = window.iina.preferences.get(key);
+      const matches = typeof value === "boolean"
+        ? booleanPreferenceValue(storedValue, !value) === value
+        : typeof value === "number"
+          ? Number(storedValue) === value
+          : storedValue === value;
+      if (!matches) {
+        throw new Error(`Could not reset ${key}`);
+      }
+    }
+
+    function resetPreferencesAtomically() {
+      const keys = Object.keys(DEFAULT_SETTINGS);
+      const previousValues = {};
+      const attemptedKeys = [];
+
+      keys.forEach((key) => {
+        previousValues[key] = preferenceGet(key, DEFAULT_SETTINGS[key]);
+      });
+
+      try {
+        keys.forEach((key) => {
+          attemptedKeys.push(key);
+          preferenceSetOrThrow(key, DEFAULT_SETTINGS[key]);
+        });
+      } catch (error) {
+        let rollbackFailed = false;
+        attemptedKeys.reverse().forEach((key) => {
+          try {
+            preferenceSetOrThrow(key, previousValues[key]);
+          } catch (rollbackError) {
+            rollbackFailed = true;
+          }
+        });
+        if (rollbackFailed) {
+          throw new Error("Settings reset failed and some values could not be restored");
+        }
+        throw error;
+      }
+    }
+
+    function refreshSettingsControls() {
+      const controls = Array.prototype.slice.call(document.querySelectorAll("[data-pref-key]"));
+      controls.forEach((control) => {
+        const key = control.dataset && control.dataset.prefKey;
+        if (!key || !Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, key)) return;
+        const value = preferenceGet(key, DEFAULT_SETTINGS[key]);
+        if (control.type === "radio") {
+          control.checked = String(control.value) === String(value);
+        } else if (control.type === "checkbox") {
+          control.checked = booleanPreferenceValue(value, DEFAULT_SETTINGS[key]);
+        } else if (control.type === "range") {
+          control.value = String(value);
+        } else {
+          control.value = String(value == null ? "" : value);
+        }
+      });
+
+      shortcutInputs.forEach((input) => {
+        input.classList.remove("recording");
+        delete input.dataset.previousValue;
+        delete input.dataset.previousPlaceholder;
+        input.placeholder = input.getAttribute("placeholder") || "";
+      });
+
+      updateExportModeSelection();
+      updateAskWhereToSaveState(false);
+      syncSensitivityInputs();
+      syncFfmpegPathFieldFromPreference();
+      validateShortcuts();
+    }
+
+    function watchForDetectedFfmpeg(attempt) {
+      const normalized = normalizeFfmpegPathValue(preferenceGet("ffmpegPath", ""));
+      if (normalized || attempt >= 16) {
+        syncFfmpegPathFieldFromPreference();
+        return;
+      }
+      setTimeout(() => watchForDetectedFfmpeg(attempt + 1), 250);
+    }
+
+    function showResetStatus(message, isError) {
+      if (!resetSettingsStatus) return;
+      clearTimeout(resetStatusTimer);
+      resetSettingsStatus.textContent = message || "";
+      resetSettingsStatus.classList.toggle("is-error", Boolean(isError));
+      resetSettingsStatus.classList.toggle("is-visible", Boolean(message));
+      if (!message) return;
+      resetStatusTimer = setTimeout(() => {
+        resetSettingsStatus.classList.remove("is-visible");
+      }, isError ? 3200 : 1800);
+    }
+
+    function resetDialogFocusableElements() {
+      if (!resetSettingsDialog) return [];
+      return Array.prototype.slice.call(
+        resetSettingsDialog.querySelectorAll("button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex='-1'])")
+      );
+    }
+
+    function resetDialogPlacement(buttonRect, dialogRect, viewportWidth, viewportHeight) {
+      const margin = 10;
+      const gap = 20;
+      const maxLeft = Math.max(margin, viewportWidth - dialogRect.width - margin);
+      const maxTop = Math.max(margin, viewportHeight - dialogRect.height - margin);
+      const preferredLeft = buttonRect.right + gap;
+      let left = Math.min(preferredLeft, maxLeft);
+      let top = Math.min(Math.max(margin, buttonRect.top), maxTop);
+      let placeBelow = false;
+
+      if (left <= buttonRect.right) {
+        placeBelow = true;
+        left = Math.min(Math.max(margin, buttonRect.left), maxLeft);
+        top = Math.min(Math.max(margin, buttonRect.bottom + gap), maxTop);
+      }
+
+      return {
+        left,
+        top,
+        placeBelow,
+        tailTop: Math.min(dialogRect.height - 18, Math.max(10, buttonRect.top + (buttonRect.height / 2) - top - 5)),
+        tailLeft: Math.min(dialogRect.width - 22, Math.max(12, buttonRect.left + (buttonRect.width / 2) - left - 5))
+      };
+    }
+
+    function positionResetSettingsDialog() {
+      if (!resetConfirmationOpen || !resetSettingsButton || !resetSettingsDialog) return;
+      const viewportWidth = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 320);
+      const viewportHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 240);
+      const buttonRect = resetSettingsButton.getBoundingClientRect();
+      const dialogRect = resetSettingsDialog.getBoundingClientRect();
+      const placement = resetDialogPlacement(buttonRect, dialogRect, viewportWidth, viewportHeight);
+
+      resetSettingsDialog.classList.toggle("is-below", placement.placeBelow);
+      resetSettingsDialog.style.setProperty("--reset-dialog-left", `${Math.round(placement.left)}px`);
+      resetSettingsDialog.style.setProperty("--reset-dialog-top", `${Math.round(placement.top)}px`);
+      resetSettingsDialog.style.setProperty("--reset-dialog-tail-top", `${Math.round(placement.tailTop)}px`);
+      resetSettingsDialog.style.setProperty("--reset-dialog-tail-left", `${Math.round(placement.tailLeft)}px`);
+    }
+
+    function openResetSettingsDialog(event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      if (!resetSettingsDialogBackdrop || !resetSettingsDialog || resetConfirmationOpen || resetInFlight) return;
+      if (resetDialogHideTimer !== null) {
+        clearTimeout(resetDialogHideTimer);
+        resetDialogHideTimer = null;
+      }
+      showResetStatus("", false);
+      resetConfirmationOpen = true;
+      resetSettingsDialogBackdrop.hidden = false;
+      resetSettingsDialogBackdrop.setAttribute("aria-hidden", "false");
+      resetSettingsDialog.classList.remove("is-open");
+      positionResetSettingsDialog();
+      requestAnimationFrame(() => {
+        if (!resetConfirmationOpen) return;
+        positionResetSettingsDialog();
+        resetSettingsDialog.classList.add("is-open");
+        if (resetSettingsCancel) resetSettingsCancel.focus();
+      });
+    }
+
+    function handleResetSettingsButtonKeydown(event) {
+      if ((event.key !== "Enter" && event.key !== " " && event.key !== "Spacebar") || event.repeat) return;
+      openResetSettingsDialog(event);
+    }
+
+    function handleResetSettingsButtonPointerUp(event) {
+      if (event.button !== undefined && event.button !== 0) return;
+      openResetSettingsDialog(event);
+    }
+
+    function handleResetDialogActionKeydown(event) {
+      if ((event.key !== "Enter" && event.key !== " " && event.key !== "Spacebar") || event.repeat) return;
+      if (event.currentTarget === resetSettingsConfirm) {
+        confirmSettingsReset(event);
+      } else {
+        closeResetSettingsDialog(event);
+      }
+    }
+
+    function closeResetSettingsDialog(event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      if (!resetSettingsDialogBackdrop || !resetConfirmationOpen || resetInFlight) return;
+      resetConfirmationOpen = false;
+      resetSettingsDialogBackdrop.setAttribute("aria-hidden", "true");
+      if (resetSettingsDialog) resetSettingsDialog.classList.remove("is-open");
+      if (resetDialogHideTimer !== null) clearTimeout(resetDialogHideTimer);
+      resetDialogHideTimer = setTimeout(() => {
+        resetDialogHideTimer = null;
+        if (!resetConfirmationOpen) resetSettingsDialogBackdrop.hidden = true;
+      }, 140);
+      setTimeout(() => {
+        if (resetSettingsButton && !resetSettingsButton.disabled) resetSettingsButton.focus();
+      }, 150);
+    }
+
+    function handleResetDialogKeydown(event) {
+      if (!resetConfirmationOpen) return;
+      if (event.key === "Escape" || event.key === "Esc") {
+        event.preventDefault();
+        event.stopPropagation();
+        closeResetSettingsDialog();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = resetDialogFocusableElements();
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    function confirmSettingsReset(event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      if (!resetConfirmationOpen || resetInFlight) return;
+      resetInFlight = true;
+      if (resetSettingsCancel) resetSettingsCancel.disabled = true;
+      if (resetSettingsConfirm) resetSettingsConfirm.disabled = true;
+      if (resetSettingsButton) resetSettingsButton.disabled = true;
+
+      let succeeded = false;
+      try {
+        resetPreferencesAtomically();
+        refreshSettingsControls();
+        watchForDetectedFfmpeg(0);
+        succeeded = true;
+      } catch (error) {
+        showResetStatus("Could not reset settings", true);
+      } finally {
+        resetInFlight = false;
+        if (resetSettingsCancel) resetSettingsCancel.disabled = false;
+        if (resetSettingsConfirm) resetSettingsConfirm.disabled = false;
+        if (resetSettingsButton) resetSettingsButton.disabled = false;
+      }
+
+      if (succeeded) {
+        closeResetSettingsDialog();
+        showResetStatus("Settings reset", false);
+      } else {
+        positionResetSettingsDialog();
+        if (resetSettingsCancel) resetSettingsCancel.focus();
+      }
+    }
+
+    function normalizeFfmpegPathValue(value) {
+      const text = String(value == null ? "" : value).trim();
+      return text === "ffmpeg" ? "" : text;
+    }
+
+    function isAbsoluteFfmpegPathCandidate(value) {
+      const text = normalizeFfmpegPathValue(value);
+      return !text || text.startsWith("/");
+    }
+
+    function setFfmpegPathWarning(message) {
+      if (!ffmpegPathWarning) return;
+      ffmpegPathWarning.textContent = message || "";
+      ffmpegPathWarning.classList.toggle("is-visible", Boolean(message));
+    }
+
+    function syncFfmpegPathFieldFromPreference() {
+      if (!ffmpegPathInput) return;
+      const normalized = normalizeFfmpegPathValue(preferenceGet("ffmpegPath", ""));
+      ffmpegPathCommittedValue = normalized;
+      ffmpegPathInput.value = normalized;
+      ffmpegPathInput.placeholder = "FFmpeg not found";
+      setFfmpegPathWarning("");
+      if (normalized !== preferenceGet("ffmpegPath", "")) {
+        preferenceSet("ffmpegPath", normalized);
+      }
+    }
+
+    function commitFfmpegPathField() {
+      if (!ffmpegPathInput) return;
+      const normalized = normalizeFfmpegPathValue(ffmpegPathInput.value);
+      ffmpegPathInput.value = normalized;
+      ffmpegPathCommittedValue = normalized;
+      preferenceSet("ffmpegPath", normalized);
+      if (!isAbsoluteFfmpegPathCandidate(normalized)) {
+        setFfmpegPathWarning("Invalid FFmpeg executable");
+      } else {
+        setFfmpegPathWarning("");
+      }
+    }
+
+    function restoreFfmpegPathField() {
+      if (!ffmpegPathInput) return;
+      ffmpegPathInput.value = ffmpegPathCommittedValue;
+      setFfmpegPathWarning("");
+    }
+
+    function emitPreferenceEvents(input) {
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    function positionHelpTooltip(icon) {
+      if (!icon || !icon.nextElementSibling || !icon.nextElementSibling.classList.contains("help-tooltip")) return;
+      const tooltip = icon.nextElementSibling;
+      const margin = 10;
+      const gap = 8;
+      const viewportWidth = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 320);
+      const viewportHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 240);
+      const iconRect = icon.getBoundingClientRect();
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const tooltipWidth = Math.min(tooltipRect.width || 260, viewportWidth - (margin * 2));
+      const tooltipHeight = tooltipRect.height || 40;
+      const preferredLeft = iconRect.left + (iconRect.width / 2) - (tooltipWidth / 2);
+      const left = Math.min(
+        viewportWidth - tooltipWidth - margin,
+        Math.max(margin, preferredLeft)
+      );
+      const preferredTop = iconRect.top - tooltipHeight - gap;
+      const belowTop = iconRect.bottom + gap;
+      const top = preferredTop >= margin
+        ? preferredTop
+        : Math.min(viewportHeight - tooltipHeight - margin, Math.max(margin, belowTop));
+
+      tooltip.style.setProperty("--help-tooltip-left", `${Math.round(left)}px`);
+      tooltip.style.setProperty("--help-tooltip-top", `${Math.round(top)}px`);
+    }
+
+    function activateHelpTooltip(icon) {
+      clearTimeout(helpTooltipCloseTimer);
+      if (activeHelpIcon && activeHelpIcon !== icon) {
+        activeHelpIcon.classList.remove("is-help-active");
+        if (activeHelpIcon.nextElementSibling) {
+          activeHelpIcon.nextElementSibling.classList.remove("is-help-active");
+        }
+      }
+      activeHelpIcon = icon;
+      icon.classList.add("is-help-active");
+      if (icon.nextElementSibling) {
+        icon.nextElementSibling.classList.add("is-help-active");
+      }
+      positionHelpTooltip(icon);
+    }
+
+    function deactivateHelpTooltip(icon) {
+      clearTimeout(helpTooltipCloseTimer);
+      helpTooltipCloseTimer = setTimeout(() => {
+        if (activeHelpIcon === icon) activeHelpIcon = null;
+        icon.classList.remove("is-help-active");
+        if (icon.nextElementSibling) {
+          icon.nextElementSibling.classList.remove("is-help-active");
+        }
+      }, 140);
+    }
+
+    function isValidShortcutKey(key) {
+      return /^[A-Z]$/.test(key) ||
+        /^[0-9]$/.test(key) ||
+        /^F([1-9]|1[0-2])$/.test(key) ||
+        key === "SPACE" ||
+        key === "TAB" ||
+        key === "ENTER" ||
+        key === "UP" ||
+        key === "DOWN" ||
+        key === "LEFT" ||
+        key === "RIGHT";
+    }
+
+    function normalizeShortcut(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return { empty: true, normalized: "" };
+      if (/\s/.test(raw)) return { invalid: true };
+
+      const parts = raw.split("+");
+      if (!parts.length || parts.some((part) => !part.trim())) return { invalid: true };
+
+      const modifiers = [];
+      for (let index = 0; index < parts.length - 1; index += 1) {
+        const alias = MODIFIER_ALIASES[parts[index].toLowerCase()];
+        if (!alias || modifiers.includes(alias)) return { invalid: true };
+        modifiers.push(alias);
+      }
+
+      const key = parts[parts.length - 1].trim().toUpperCase();
+      if (!key || MODIFIER_ALIASES[key.toLowerCase()] || !isValidShortcutKey(key)) return { invalid: true };
+
+      modifiers.sort((a, b) => MODIFIER_ORDER.indexOf(a) - MODIFIER_ORDER.indexOf(b));
+      return {
+        empty: false,
+        invalid: false,
+        normalized: modifiers.concat([key]).join("+")
+      };
+    }
+
+    function isModifierOnlyKey(event) {
+      return event.key === "Meta" ||
+        event.key === "Control" ||
+        event.key === "Alt" ||
+        event.key === "Shift" ||
+        event.key === "OS" ||
+        event.code === "MetaLeft" ||
+        event.code === "MetaRight" ||
+        event.code === "ControlLeft" ||
+        event.code === "ControlRight" ||
+        event.code === "AltLeft" ||
+        event.code === "AltRight" ||
+        event.code === "ShiftLeft" ||
+        event.code === "ShiftRight";
+    }
+
+    function hasNoModifiers(event) {
+      return !event.metaKey && !event.shiftKey && !event.altKey && !event.ctrlKey;
+    }
+
+    function isClearKey(event) {
+      return event.code === "Backspace" ||
+        event.code === "Delete" ||
+        event.key === "Backspace" ||
+        event.key === "Delete";
+    }
+
+    function normalizeEventKey(event) {
+      const code = event.code || "";
+      const key = event.key || "";
+
+      const letterMatch = code.match(/^Key([A-Z])$/);
+      if (letterMatch) return letterMatch[1];
+
+      const digitMatch = code.match(/^Digit([0-9])$/);
+      if (digitMatch) return digitMatch[1];
+
+      const numpadDigitMatch = code.match(/^Numpad([0-9])$/);
+      if (numpadDigitMatch) return numpadDigitMatch[1];
+
+      if (/^F([1-9]|1[0-2])$/i.test(code)) return code.toUpperCase();
+
+      const specialKeys = {
+        Space: "SPACE",
+        Spacebar: "SPACE",
+        Tab: "TAB",
+        Enter: "ENTER",
+        NumpadEnter: "ENTER",
+        Return: "ENTER",
+        ArrowUp: "UP",
+        ArrowDown: "DOWN",
+        ArrowLeft: "LEFT",
+        ArrowRight: "RIGHT"
+      };
+
+      if (specialKeys[code]) return specialKeys[code];
+      if (specialKeys[key]) return specialKeys[key];
+      return "";
+    }
+
+    function buildShortcutFromEvent(event) {
+      if (isModifierOnlyKey(event)) return "";
+
+      const key = normalizeEventKey(event);
+      if (!key) return "";
+
+      const modifiers = [];
+      if (event.metaKey) modifiers.push("Meta");
+      if (event.shiftKey) modifiers.push("Shift");
+      if (event.altKey) modifiers.push("Alt");
+      if (event.ctrlKey) modifiers.push("Ctrl");
+
+      return modifiers.concat([key]).join("+");
+    }
+
+    function beginRecording(input) {
+      if (input.classList.contains("recording")) return;
+      input.dataset.previousValue = input.value;
+      input.dataset.previousPlaceholder = input.placeholder;
+      input.classList.add("recording");
+      input.placeholder = "Press keys...";
+      input.value = "";
+    }
+
+    function endRecording(input, restorePrevious) {
+      if (!input.classList.contains("recording")) return;
+      if (restorePrevious) {
+        input.value = input.dataset.previousValue || "";
+      }
+      input.placeholder = input.dataset.previousPlaceholder || "";
+      input.classList.remove("recording");
+      delete input.dataset.previousValue;
+      delete input.dataset.previousPlaceholder;
+      validateShortcuts();
+    }
+
+    function setWarning(input, kind, message) {
+      const control = input.closest(".shortcut-control");
+      const warning = control.querySelector(".shortcut-warning");
+      input.classList.toggle("invalid", kind === "invalid");
+      input.classList.toggle("conflict", kind === "conflict");
+      input.title = message || "";
+      control.classList.toggle("has-warning", Boolean(message));
+      warning.textContent = message || "";
+    }
+
+    function validateShortcuts() {
+      const normalizedToInputs = {};
+      shortcutInputs.forEach((input) => {
+        const result = normalizeShortcut(input.value);
+        input.dataset.normalizedShortcut = result.normalized || "";
+
+        if (result.empty) {
+          setWarning(input, "", "");
+          return;
+        }
+
+        if (result.invalid) {
+          setWarning(input, "invalid", "Invalid shortcut format.");
+          return;
+        }
+
+        if (!normalizedToInputs[result.normalized]) {
+          normalizedToInputs[result.normalized] = [];
+        }
+        normalizedToInputs[result.normalized].push(input);
+        setWarning(input, "", "");
+      });
+
+      Object.keys(normalizedToInputs).forEach((shortcut) => {
+        const inputs = normalizedToInputs[shortcut];
+        if (inputs.length < 2) return;
+        inputs.forEach((input) => {
+          setWarning(input, "conflict", "This shortcut is already used and may conflict.");
+        });
+      });
+    }
+
+    shortcutInputs.forEach((input) => {
+      input.readOnly = true;
+      input.addEventListener("focus", () => {
+        beginRecording(input);
+      });
+      input.addEventListener("click", () => {
+        beginRecording(input);
+      });
+      input.addEventListener("blur", () => {
+        endRecording(input, true);
+      });
+      input.addEventListener("keydown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (event.key === "Escape" || event.key === "Esc") {
+          endRecording(input, true);
+          input.blur();
+          return;
+        }
+
+        if (isClearKey(event) && hasNoModifiers(event)) {
+          input.value = "";
+          endRecording(input, false);
+          emitPreferenceEvents(input);
+          input.blur();
+          return;
+        }
+
+        const shortcut = buildShortcutFromEvent(event);
+        if (!shortcut) {
+          if (!isModifierOnlyKey(event)) {
+            setWarning(input, "invalid", "Unsupported key for shortcut.");
+          }
+          return;
+        }
+
+        input.value = normalizeShortcut(shortcut).normalized || shortcut;
+        endRecording(input, false);
+        emitPreferenceEvents(input);
+        input.blur();
+      });
+      input.addEventListener("input", validateShortcuts);
+      input.addEventListener("change", validateShortcuts);
+    });
+
+    helpIcons.forEach((icon) => {
+      icon.addEventListener("pointerenter", () => activateHelpTooltip(icon));
+      icon.addEventListener("pointerleave", () => deactivateHelpTooltip(icon));
+      icon.addEventListener("focus", () => activateHelpTooltip(icon));
+      icon.addEventListener("blur", () => deactivateHelpTooltip(icon));
+      icon.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" || event.key === "Esc") {
+          deactivateHelpTooltip(icon);
+          icon.blur();
+        }
+      });
+      const tooltip = icon.nextElementSibling && icon.nextElementSibling.classList.contains("help-tooltip")
+        ? icon.nextElementSibling
+        : null;
+      if (tooltip) {
+        tooltip.addEventListener("pointerenter", () => activateHelpTooltip(icon));
+        tooltip.addEventListener("pointerleave", () => deactivateHelpTooltip(icon));
+      }
+    });
+    window.addEventListener("resize", () => {
+      if (activeHelpIcon) positionHelpTooltip(activeHelpIcon);
+    });
+    window.addEventListener("scroll", () => {
+      if (activeHelpIcon) positionHelpTooltip(activeHelpIcon);
+    }, true);
+
+    // IINA's preferences webview does not expose the main-entry
+    // input.getAllKeyBindings API, so only ClipMaker shortcuts can be compared.
+    if (askWhereToSaveCheckbox) {
+      askWhereToSaveCheckbox.addEventListener("change", () => updateAskWhereToSaveState(true));
+    }
+    updateAskWhereToSaveState(false);
+    setTimeout(() => updateAskWhereToSaveState(false), 100);
+    setTimeout(() => updateAskWhereToSaveState(false), 500);
+
+    if (ffmpegPathInput) {
+      syncFfmpegPathFieldFromPreference();
+      ffmpegPathInput.addEventListener("focus", () => {
+        ffmpegPathCommittedValue = normalizeFfmpegPathValue(preferenceGet("ffmpegPath", ffmpegPathInput.value));
+      });
+      ffmpegPathInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === "Return") {
+          event.preventDefault();
+          commitFfmpegPathField();
+          ffmpegPathInput.blur();
+        } else if (event.key === "Escape" || event.key === "Esc") {
+          event.preventDefault();
+          restoreFfmpegPathField();
+          ffmpegPathInput.blur();
+        }
+      });
+      ffmpegPathInput.addEventListener("blur", commitFfmpegPathField);
+      setTimeout(syncFfmpegPathFieldFromPreference, 100);
+      setTimeout(syncFfmpegPathFieldFromPreference, 500);
+    }
+
+    migrateContainerPreference();
+    setTimeout(migrateContainerPreference, 100);
+    setTimeout(migrateContainerPreference, 500);
+
+    exportModeInputs.forEach((input) => {
+      input.addEventListener("change", persistExportModeSelection);
+    });
+    migrateExportModePreference();
+    setTimeout(migrateExportModePreference, 100);
+    setTimeout(migrateExportModePreference, 500);
+
+    sensitivityInputs.forEach((input) => {
+      input.addEventListener("input", () => updateSensitivityInput(input, true));
+      input.addEventListener("change", () => updateSensitivityInput(input, true));
+    });
+    syncSensitivityInputs();
+    setTimeout(syncSensitivityInputs, 100);
+    setTimeout(syncSensitivityInputs, 500);
+
+    validateShortcuts();
+    setTimeout(validateShortcuts, 100);
+    setTimeout(validateShortcuts, 500);
+  </script>
+  <script>
+    (function bindResetConfirmationUI() {
+      const button = document.getElementById("reset-settings-button");
+      const dialog = document.getElementById("reset-settings-dialog");
+      const cancel = document.getElementById("reset-settings-cancel");
+      const confirm = document.getElementById("reset-settings-confirm");
+      if (!button || !dialog || !cancel || !confirm || button.dataset.resetConfirmationBound === "true") return;
+
+      button.dataset.resetConfirmationBound = "true";
+      button.addEventListener("pointerup", handleResetSettingsButtonPointerUp);
+      button.addEventListener("click", openResetSettingsDialog);
+      button.addEventListener("keydown", handleResetSettingsButtonKeydown);
+      cancel.addEventListener("click", closeResetSettingsDialog);
+      cancel.addEventListener("keydown", handleResetDialogActionKeydown);
+      confirm.addEventListener("click", confirmSettingsReset);
+      confirm.addEventListener("keydown", handleResetDialogActionKeydown);
+      dialog.addEventListener("click", (event) => event.stopPropagation());
+      document.addEventListener("keydown", handleResetDialogKeydown, true);
+      document.addEventListener("pointerdown", (event) => {
+        if (!resetConfirmationOpen || resetInFlight) return;
+        if (button.contains(event.target) || dialog.contains(event.target)) return;
+        closeResetSettingsDialog();
+      }, true);
+      window.addEventListener("resize", () => {
+        if (resetConfirmationOpen) positionResetSettingsDialog();
+      });
+      window.addEventListener("scroll", () => {
+        if (resetConfirmationOpen) positionResetSettingsDialog();
+      }, true);
+    }());
+  </script>
+</body>
+</html>

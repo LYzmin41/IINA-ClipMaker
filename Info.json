@@ -1,0 +1,48 @@
+{
+  "name": "ClipMaker",
+  "identifier": "com.pumpk.iina.clipmaker",
+  "version": "1.0.0",
+  "ghVersion": 1,
+  "ghRepo": "LYzmin41/IINA-ClipMaker",
+  "description": "Mark multiple In/Out ranges in IINA and export them as separate video files with FFmpeg.",
+  "author": {
+    "name": "pumpk",
+    "url": "https://github.com/LYzmin41/IINA-ClipMaker"
+  },
+  "entry": "main.js",
+  "permissions": [
+    "show-osd",
+    "show-alert",
+    "file-system"
+  ],
+  "sidebarTab": {
+    "name": "ClipMaker"
+  },
+  "preferencesPage": "preferences.html",
+  "preferenceDefaults": {
+    "outputFolder": "~/Movies/IINA clips",
+    "askWhereToSave": false,
+    "ffmpegPath": "",
+    "container": "source",
+    "exportMode": "fast",
+    "invertTimecodeScrolling": false,
+    "invertTimecodeDragging": false,
+    "timecodeScrollSensitivity": 3,
+    "timecodeDragSensitivity": 3,
+    "clipSortMode": "manual",
+    "clipSortDirection": "ascending",
+    "addNewClipsToTop": true,
+    "revealAfterExport": true,
+    "deleteClipsAfterExport": false,
+    "deleteWithoutConfirmation": false,
+    "showSidebarOnInvalidExport": true,
+    "shortcutShowPanel": "Meta+Shift+C",
+    "shortcutSetIn": "Meta+Shift+I",
+    "shortcutSetOut": "Meta+Shift+O",
+    "shortcutAddClip": "Meta+Shift+A",
+    "shortcutExportSelected": "Meta+Shift+E",
+    "shortcutExportAll": "Meta+Shift+Alt+E",
+    "shortcutClearMarks": "Meta+Shift+K",
+    "shortcutClearList": "Meta+Shift+Alt+K"
+  }
+}
