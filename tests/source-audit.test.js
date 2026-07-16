@@ -157,7 +157,7 @@ test("manifest, changelog, and artifact filename use the same release version", 
   assert.ok(manifest.ghVersion > 0);
 });
 
-test("public release includes the MIT license and only project-owned speed icons", () => {
+test("public release includes the MIT license and bundled speed icons", () => {
   assert.match(read("LICENSE"), /^MIT License$/m);
   assert.match(read("README.md"), /\[MIT License\]\(LICENSE\)/);
 
