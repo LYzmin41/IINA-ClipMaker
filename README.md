@@ -86,7 +86,7 @@ The sidebar displays compact frame-based values such as `3s 18f`, `2m 04s 00f`, 
 
 Search filters the visible list. Sort supports Custom, Creation Order, Name, Duration, Timeline Position (In), and Timeline Position (Out). Selecting an active derived sort option again, Shift-clicking the Sort button, or right-clicking it reverses the direction.
 
-Choosing Custom preserves the complete order from the previous sort and enables manual card reordering. Dragging a card from any other sort switches to Custom automatically without first changing the visible sequence. Dragging remains unavailable while search is filtering the list. Export Selected and Export All follow the current visible order.
+Choosing Custom preserves the complete order from the previous sort and enables manual card reordering. Reversing the sort direction in Custom flips the entire current manual sequence, including every previous drag adjustment. Dragging a card from any other sort switches to Custom automatically without first changing the visible sequence. Dragging remains unavailable while search is filtering the list. Export Selected and Export All follow the current visible order.
 
 ## Export modes
 

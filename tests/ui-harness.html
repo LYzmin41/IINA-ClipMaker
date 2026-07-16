@@ -111,6 +111,13 @@
               { id: 1, creationSequence: 1, name: "Gamma", inPoint: 1, outPoint: 3, duration: 2, selected: false, exportStatus: "pending" }
             ]
           };
+          const applyClipOrder = (orderedIds) => {
+            if (!Array.isArray(orderedIds) || orderedIds.length !== state.clips.length) return;
+            const clipsById = new Map(state.clips.map((clip) => [String(clip.id), clip]));
+            const next = orderedIds.map((id) => clipsById.get(String(id)));
+            if (next.some((clip) => !clip) || new Set(next).size !== state.clips.length) return;
+            state.clips = next;
+          };
           window.iina = {
             onMessage(name, callback) {
               if (callback == null) listeners.delete(name);
@@ -119,8 +126,17 @@
             postMessage(name, payload) {
               const previousSelectedCount = state.selectedClipIds.length;
               if (name === "#call.$setClipSort") {
+                if (payload.args[0] === "custom") applyClipOrder(payload.args[2]);
                 state.clipSortMode = payload.args[0];
                 state.clipSortDirection = payload.args[1];
+              }
+              if (name === "#call.$reorderClips") {
+                const sourceSortMode = state.clipSortMode;
+                applyClipOrder(payload.args[0]);
+                if (payload.args[1] === true) {
+                  state.clipSortMode = "custom";
+                  if (sourceSortMode !== "custom") state.clipSortDirection = "ascending";
+                }
               }
               if (name === "#call.$setPositionTime") {
                 state.positionSeconds = payload.args[0];

@@ -455,8 +455,13 @@ test("Custom captures the previous sort and drag switching saves the dropped ord
   await runtime.callRpc("$setClipSort", "name", "ascending");
   let state = await runtime.callRpc("$setClipSort", "custom", "descending");
   assert.equal(state.clipSortMode, "custom");
-  assert.equal(state.clipSortDirection, "ascending");
+  assert.equal(state.clipSortDirection, "descending");
   assert.deepEqual(Array.from(state.clips, (clip) => clip.id), [2, 1, 3]);
+
+  state = await runtime.callRpc("$reorderClips", [3, 2, 1], true);
+  assert.equal(state.clipSortMode, "custom");
+  assert.equal(state.clipSortDirection, "descending");
+  assert.deepEqual(Array.from(state.clips, (clip) => clip.id), [3, 2, 1]);
 
   await runtime.callRpc("$setClipSort", "in", "ascending");
   state = await runtime.callRpc("$reorderClips", [3, 2, 1], true);
@@ -617,13 +622,34 @@ test("active menu selection and Shift reversal keep the current sorting type", (
   assert.deepEqual(Array.from(custom), ["custom", "ascending"]);
 
   const customReverse = sidebarEvaluate(`(() => {
-    latestState = { clipSortMode: "custom", clipSortDirection: "ascending" };
-    let requested = null;
-    requestClipSort = (mode, direction) => { requested = [mode, direction]; };
+    latestState = {
+      clipSortMode: "custom",
+      clipSortDirection: "ascending",
+      clips: [{ id: 1 }, { id: 3 }, { id: 2 }],
+    };
+    const requested = [];
+    requestClipSort = (mode, direction, orderedIds) => {
+      requested.push([mode, direction, orderedIds.slice()]);
+      latestState.clips = clipsOrderedByIds(latestState.clips, orderedIds);
+      latestState.clipSortDirection = direction;
+    };
     reverseCurrentClipSortDirection();
-    return requested;
+    latestState.clips = clipsOrderedByIds(latestState.clips, [2, 1, 3]);
+    reverseCurrentClipSortDirection();
+    return {
+      requested,
+      direction: latestState.clipSortDirection,
+      order: latestState.clips.map((clip) => clip.id),
+    };
   })()`);
-  assert.equal(customReverse, null);
+  assert.deepEqual(JSON.parse(JSON.stringify(customReverse)), {
+    requested: [
+      ["custom", "descending", [2, 3, 1]],
+      ["custom", "ascending", [3, 1, 2]],
+    ],
+    direction: "ascending",
+    order: [3, 1, 2],
+  });
 });
 
 test("right-clicking Sort suppresses the context menu and reverses like Shift-click", () => {
@@ -683,9 +709,9 @@ test("sort icon hydrates without animation and animates only a real direction ch
     };
   })()`);
 
-  assert.deepEqual(Array.from(result.animationAdds), ["is-changing-to-ascending"]);
-  assert.equal(result.direction, "ascending");
-  assert.equal(result.label, "Sort clips, custom order");
+  assert.deepEqual(Array.from(result.animationAdds), ["is-changing-to-ascending", "is-changing-to-descending"]);
+  assert.equal(result.direction, "descending");
+  assert.equal(result.label, "Sort clips, custom order, descending");
 });
 
 test("Custom is represented by the first checked sort menu item", () => {

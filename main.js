@@ -168,8 +168,8 @@ function clipSortModePreference() {
 }
 
 function clipSortDirectionPreference() {
-  if (clipSortModePreference() === "custom") return "ascending";
-  return normalizeClipSortDirection(pref("clipSortDirection", "descending"));
+  const fallback = clipSortModePreference() === "custom" ? "ascending" : "descending";
+  return normalizeClipSortDirection(pref("clipSortDirection", fallback));
 }
 
 function addNewClipsToTopPreference() {
@@ -2540,7 +2540,9 @@ function registerStableRpcMethods() {
     if (isDisposed) return null;
     if (rejectClipMutationWhileExporting("reorder clips")) return buildStableState();
     const shouldSwitchToCustom = switchToCustom === true;
-    if (!shouldSwitchToCustom && clipSortModePreference() !== "custom") {
+    const sourceSortMode = clipSortModePreference();
+    const sourceSortDirection = clipSortDirectionPreference();
+    if (!shouldSwitchToCustom && sourceSortMode !== "custom") {
       state.lastAction = "clip reorder ignored while sorted";
       return buildStableState();
     }
@@ -2551,7 +2553,10 @@ function registerStableRpcMethods() {
     if (shouldSwitchToCustom) {
       try {
         iina.preferences.set("clipSortMode", "custom");
-        iina.preferences.set("clipSortDirection", "ascending");
+        iina.preferences.set(
+          "clipSortDirection",
+          sourceSortMode === "custom" ? sourceSortDirection : "ascending"
+        );
       } catch (error) {
         logError("Could not switch clip sorting to Custom", error);
       }
@@ -2579,7 +2584,7 @@ function registerStableRpcMethods() {
   rpc.$setClipSort = function (mode, direction, orderedIds) {
     if (isDisposed) return null;
     const nextMode = normalizeClipSortMode(mode);
-    const nextDirection = nextMode === "custom" ? "ascending" : normalizeClipSortDirection(direction);
+    const nextDirection = normalizeClipSortDirection(direction);
     if (nextMode === "custom") {
       const capturedOrder = Array.isArray(orderedIds)
         ? orderedIds

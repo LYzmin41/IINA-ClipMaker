@@ -319,7 +319,6 @@ function currentClipSortMode() {
 }
 
 function currentClipSortDirection() {
-  if (currentClipSortMode() === "custom") return "ascending";
   return normalizeClipSortDirection(latestState && latestState.clipSortDirection);
 }
 
@@ -447,7 +446,7 @@ function clipSortMenuItems() {
 function updateClipSortControl(state) {
   const button = $("clipSortButton");
   const mode = normalizeClipSortMode(state && state.clipSortMode);
-  const direction = mode === "custom" ? "ascending" : normalizeClipSortDirection(state && state.clipSortDirection);
+  const direction = normalizeClipSortDirection(state && state.clipSortDirection);
   if (button) {
     const previousDirection = button.dataset.sortDirection;
     const directionChanged = CLIP_SORT_DIRECTIONS.includes(previousDirection)
@@ -455,7 +454,10 @@ function updateClipSortControl(state) {
     button.dataset.sortDirection = direction;
     button.classList.toggle("is-active", mode !== "creation" || direction !== "descending");
     button.setAttribute("aria-expanded", clipSortMenuOpen ? "true" : "false");
-    button.setAttribute("aria-label", mode === "custom" ? "Sort clips, custom order" : `Sort clips, ${direction}`);
+    button.setAttribute(
+      "aria-label",
+      mode === "custom" ? `Sort clips, custom order, ${direction}` : `Sort clips, ${direction}`
+    );
     if (directionChanged) {
       clearTimeout(clipSortIconAnimationTimer);
       button.classList.remove("is-changing-to-ascending", "is-changing-to-descending");
@@ -501,11 +503,11 @@ function openClipSortMenu(focusItem) {
   }
 }
 
-function requestClipSort(mode, direction) {
+function requestClipSort(mode, direction, orderedIds) {
   const nextMode = normalizeClipSortMode(mode);
-  const nextDirection = nextMode === "custom" ? "ascending" : normalizeClipSortDirection(direction);
+  const nextDirection = normalizeClipSortDirection(direction);
   const customOrder = nextMode === "custom" && latestState
-    ? clipIdsInCurrentSortOrder(latestState.clips)
+    ? Array.isArray(orderedIds) ? orderedIds.slice() : clipIdsInCurrentSortOrder(latestState.clips)
     : null;
   if (latestState) {
     if (customOrder) latestState.clips = clipsOrderedByIds(latestState.clips, customOrder);
@@ -518,9 +520,12 @@ function requestClipSort(mode, direction) {
 }
 
 function reverseCurrentClipSortDirection() {
-  if (currentClipSortMode() === "custom") return;
+  const mode = currentClipSortMode();
   const direction = currentClipSortDirection() === "ascending" ? "descending" : "ascending";
-  requestClipSort(currentClipSortMode(), direction);
+  const reversedCustomOrder = mode === "custom" && latestState
+    ? clipIdsInCurrentSortOrder(latestState.clips).reverse()
+    : null;
+  requestClipSort(mode, direction, reversedCustomOrder);
 }
 
 function handleClipSortContextMenu(event) {
@@ -535,7 +540,7 @@ function handleClipSortContextMenu(event) {
 function selectClipSortMode(mode) {
   const nextMode = normalizeClipSortMode(mode);
   const direction = nextMode === "custom"
-    ? "ascending"
+    ? currentClipSortMode() === "custom" ? currentClipSortDirection() : "ascending"
     : nextMode === currentClipSortMode()
     ? currentClipSortDirection() === "ascending" ? "descending" : "ascending"
     : CLIP_SORT_DEFAULT_DIRECTIONS[nextMode];
@@ -1485,7 +1490,7 @@ function commitClipDrag(dropIndex) {
   if (latestState) {
     latestState.clips = nextClips;
     latestState.clipSortMode = "custom";
-    latestState.clipSortDirection = "ascending";
+    latestState.clipSortDirection = normalizeClipSortDirection(latestState.clipSortDirection);
     updateClipSortControl(latestState);
   }
   renderClips(nextClips, state.fps || currentDisplayFps());
