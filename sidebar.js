@@ -71,10 +71,10 @@ const CLEAR_LIST_CONFIRM_SCROLL_DISMISS_RATIO = 0.2;
 const CLEAR_LIST_CONFIRM_MIN_SCROLL_PX = 24;
 const CLEAR_LIST_TRIGGER_VISIBLE_DISMISS_RATIO = 0.4;
 const DELETE_CONFIRM_HIDE_DELAY_MS = 300;
-const CLIP_SORT_MODES = ["manual", "creation", "name", "duration", "in", "out"];
+const CLIP_SORT_MODES = ["custom", "creation", "name", "duration", "in", "out"];
 const CLIP_SORT_DIRECTIONS = ["ascending", "descending"];
 const CLIP_SORT_DEFAULT_DIRECTIONS = Object.freeze({
-  manual: "ascending",
+  custom: "ascending",
   creation: "descending",
   name: "ascending",
   duration: "ascending",
@@ -305,7 +305,8 @@ function filteredClipEntries(clips) {
 
 function normalizeClipSortMode(value) {
   const mode = String(value || "").trim().toLowerCase();
-  return CLIP_SORT_MODES.includes(mode) ? mode : "manual";
+  if (mode === "manual") return "custom";
+  return CLIP_SORT_MODES.includes(mode) ? mode : "creation";
 }
 
 function normalizeClipSortDirection(value) {
@@ -318,6 +319,7 @@ function currentClipSortMode() {
 }
 
 function currentClipSortDirection() {
+  if (currentClipSortMode() === "custom") return "ascending";
   return normalizeClipSortDirection(latestState && latestState.clipSortDirection);
 }
 
@@ -361,9 +363,7 @@ function sortFilteredClipEntries(entries, mode, direction) {
   const items = Array.isArray(entries) ? entries.slice() : [];
   const normalizedMode = normalizeClipSortMode(mode);
   const normalizedDirection = normalizeClipSortDirection(direction);
-  if (normalizedMode === "manual") {
-    return normalizedDirection === "descending" ? items.reverse() : items;
-  }
+  if (normalizedMode === "custom") return items;
 
   const multiplier = normalizedDirection === "descending" ? -1 : 1;
   return items.sort((left, right) => {
@@ -389,6 +389,33 @@ function displayedClipIds(clips) {
   return displayedClipEntries(clips).map((entry) => entry.clip.id);
 }
 
+function clipIdsInCurrentSortOrder(clips) {
+  const entries = (Array.isArray(clips) ? clips : [])
+    .map((clip, index) => ({ type: "clip", clip, fullIndex: index }));
+  return sortFilteredClipEntries(entries, currentClipSortMode(), currentClipSortDirection())
+    .map((entry) => entry.clip.id);
+}
+
+function clipsOrderedByIds(clips, orderedIds) {
+  const items = Array.isArray(clips) ? clips : [];
+  const clipsById = new Map(items.map((clip) => [String(clip.id), clip]));
+  const ordered = [];
+  const seen = new Set();
+  (Array.isArray(orderedIds) ? orderedIds : []).forEach((id) => {
+    const key = String(id);
+    if (seen.has(key) || !clipsById.has(key)) return;
+    seen.add(key);
+    ordered.push(clipsById.get(key));
+  });
+  items.forEach((clip) => {
+    const key = String(clip.id);
+    if (seen.has(key)) return;
+    seen.add(key);
+    ordered.push(clip);
+  });
+  return ordered;
+}
+
 function syncDisplayedClipOrder(clips) {
   if (!rpc || typeof rpc.$setClipViewOrder !== "function") return;
   const orderedIds = displayedClipIds(clips);
@@ -409,9 +436,7 @@ function syncDisplayedClipOrder(clips) {
 }
 
 function clipReorderIsAllowed() {
-  return currentClipSortMode() === "manual"
-    && currentClipSortDirection() === "ascending"
-    && !isClipSearchActive();
+  return !isClipSearchActive();
 }
 
 function clipSortMenuItems() {
@@ -422,15 +447,15 @@ function clipSortMenuItems() {
 function updateClipSortControl(state) {
   const button = $("clipSortButton");
   const mode = normalizeClipSortMode(state && state.clipSortMode);
-  const direction = normalizeClipSortDirection(state && state.clipSortDirection);
+  const direction = mode === "custom" ? "ascending" : normalizeClipSortDirection(state && state.clipSortDirection);
   if (button) {
     const previousDirection = button.dataset.sortDirection;
     const directionChanged = CLIP_SORT_DIRECTIONS.includes(previousDirection)
       && previousDirection !== direction;
     button.dataset.sortDirection = direction;
-    button.classList.toggle("is-active", mode !== "manual" || direction !== "ascending");
+    button.classList.toggle("is-active", mode !== "creation" || direction !== "descending");
     button.setAttribute("aria-expanded", clipSortMenuOpen ? "true" : "false");
-    button.setAttribute("aria-label", `Sort clips, ${direction}`);
+    button.setAttribute("aria-label", mode === "custom" ? "Sort clips, custom order" : `Sort clips, ${direction}`);
     if (directionChanged) {
       clearTimeout(clipSortIconAnimationTimer);
       button.classList.remove("is-changing-to-ascending", "is-changing-to-descending");
@@ -444,8 +469,7 @@ function updateClipSortControl(state) {
     }
   }
   const items = clipSortMenuItems();
-  const menuMode = mode === "manual" ? "creation" : mode;
-  const activeIndex = items.findIndex((item) => item.dataset.sortMode === menuMode);
+  const activeIndex = items.findIndex((item) => item.dataset.sortMode === mode);
   items.forEach((item, index) => {
     const checked = index === activeIndex;
     item.setAttribute("aria-checked", checked ? "true" : "false");
@@ -479,24 +503,40 @@ function openClipSortMenu(focusItem) {
 
 function requestClipSort(mode, direction) {
   const nextMode = normalizeClipSortMode(mode);
-  const nextDirection = normalizeClipSortDirection(direction);
+  const nextDirection = nextMode === "custom" ? "ascending" : normalizeClipSortDirection(direction);
+  const customOrder = nextMode === "custom" && latestState
+    ? clipIdsInCurrentSortOrder(latestState.clips)
+    : null;
   if (latestState) {
+    if (customOrder) latestState.clips = clipsOrderedByIds(latestState.clips, customOrder);
     latestState.clipSortMode = nextMode;
     latestState.clipSortDirection = nextDirection;
     updateClipSortControl(latestState);
     renderClips(latestState.clips, currentDisplayFps());
   }
-  callAction(() => rpc.$setClipSort(nextMode, nextDirection));
+  callAction(() => rpc.$setClipSort(nextMode, nextDirection, customOrder));
 }
 
 function reverseCurrentClipSortDirection() {
+  if (currentClipSortMode() === "custom") return;
   const direction = currentClipSortDirection() === "ascending" ? "descending" : "ascending";
   requestClipSort(currentClipSortMode(), direction);
 }
 
+function handleClipSortContextMenu(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  closeClipSortMenu(false);
+  reverseCurrentClipSortDirection();
+}
+
 function selectClipSortMode(mode) {
   const nextMode = normalizeClipSortMode(mode);
-  const direction = nextMode === currentClipSortMode()
+  const direction = nextMode === "custom"
+    ? "ascending"
+    : nextMode === currentClipSortMode()
     ? currentClipSortDirection() === "ascending" ? "descending" : "ascending"
     : CLIP_SORT_DEFAULT_DIRECTIONS[nextMode];
   closeClipSortMenu(true);
@@ -525,6 +565,7 @@ function bindClipSortControl() {
     event.preventDefault();
     openClipSortMenu(true);
   });
+  button.addEventListener("contextmenu", handleClipSortContextMenu);
 
   clipSortMenuItems().forEach((item) => {
     item.addEventListener("click", (event) => {
@@ -1197,10 +1238,6 @@ function renderTopHeaderStatus(state) {
   ffmpeg.disabled = Boolean(state && state.canUseFfmpeg === false);
 }
 
-function clipIdsFromClips(clips) {
-  return Array.isArray(clips) ? clips.map((clip) => clip.id) : [];
-}
-
 function moveClipIdToDropIndex(ids, clipId, startIndex, dropIndex) {
   const original = Array.isArray(ids) ? ids.slice() : [];
   const filtered = original.filter((id) => id !== clipId);
@@ -1222,7 +1259,9 @@ function isInteractiveCardReorderTarget(target) {
 }
 
 function clipRowsForDrop() {
-  return Array.from(document.querySelectorAll("#clipsList .clip-position-slot"));
+  return Array.from(document.querySelectorAll(
+    "#clipsList .clip-position-slot:not(.clip-drag-placeholder)"
+  ));
 }
 
 function clipDropIndexFromPointerY(pointerY) {
@@ -1409,8 +1448,31 @@ function cleanupClipDragState(options) {
   return state;
 }
 
+function activateCustomSortForClipDrag() {
+  if (!clipReorderState || !latestState || currentClipSortMode() === "custom") return;
+  clipReorderState.sourceSortMode = latestState.clipSortMode;
+  clipReorderState.sourceSortDirection = latestState.clipSortDirection;
+  clipReorderState.sourceClips = latestState.clips.slice();
+  clipReorderState.switchedToCustom = true;
+  latestState.clips = clipsOrderedByIds(latestState.clips, clipReorderState.originalOrder);
+  latestState.clipSortMode = "custom";
+  latestState.clipSortDirection = "ascending";
+  updateClipSortControl(latestState);
+}
+
+function restoreClipSortAfterCanceledDrag(state) {
+  if (!state || !state.switchedToCustom || !latestState) return;
+  latestState.clips = state.sourceClips.slice();
+  latestState.clipSortMode = state.sourceSortMode;
+  latestState.clipSortDirection = state.sourceSortDirection;
+  updateClipSortControl(latestState);
+}
+
 function cancelClipDrag() {
-  cleanupClipDragState({ suppressClick: true });
+  const state = cleanupClipDragState({ suppressClick: true, render: false });
+  if (!state) return;
+  restoreClipSortAfterCanceledDrag(state);
+  renderClips(latestState && latestState.clips, state.fps || currentDisplayFps());
 }
 
 function commitClipDrag(dropIndex) {
@@ -1418,17 +1480,19 @@ function commitClipDrag(dropIndex) {
   const state = cleanupClipDragState({ suppressClick: true, render: false });
   if (!state || !state.hasStartedDragging) return;
   const nextIds = moveClipIdToDropIndex(state.originalOrder, state.clipId, state.originalIndex, dropIndex);
-  if (nextIds.join(",") === state.originalOrder.join(",")) {
-    renderClips(latestState && latestState.clips, state.fps || currentDisplayFps());
-    return;
-  }
   const clipsById = new Map(((latestState && latestState.clips) || []).map((clip) => [clip.id, clip]));
   const nextClips = nextIds.map((id) => clipsById.get(id)).filter(Boolean);
+  if (latestState) {
+    latestState.clips = nextClips;
+    latestState.clipSortMode = "custom";
+    latestState.clipSortDirection = "ascending";
+    updateClipSortControl(latestState);
+  }
   renderClips(nextClips, state.fps || currentDisplayFps());
   if (!rpc || typeof rpc.$reorderClips !== "function") {
     return;
   }
-  callAction(() => rpc.$reorderClips(nextIds));
+  callAction(() => rpc.$reorderClips(nextIds, true));
 }
 
 function startClipDrag(point) {
@@ -1437,6 +1501,7 @@ function startClipDrag(point) {
   clipReorderState.hasStartedDragging = true;
   clipReorderState.isInsideValidDropZone = false;
   suppressNextClipClickId = clipReorderState.clipId;
+  activateCustomSortForClipDrag();
   createClipDragGhost();
   if (clipReorderState.sourceRow) {
     clipReorderState.sourceRow.classList.add("is-reorder-dragging", "is-clip-drag-source");
@@ -1511,7 +1576,7 @@ function handleClipReorderLostCapture() {
   cancelClipDrag();
 }
 
-function beginClipReorder(event, clip, index, row, options) {
+function beginClipReorder(event, clip, row, options) {
   if (!clip || !latestState || !Array.isArray(latestState.clips)) return;
   if (latestState.exporting) return;
   if (!clipReorderIsAllowed()) return;
@@ -1520,12 +1585,14 @@ function beginClipReorder(event, clip, index, row, options) {
   if (config.source === "card" && isInteractiveCardReorderTarget(event.target)) return;
 
   if (clipReorderState) cancelClipDrag();
-  const originalOrder = clipIdsFromClips(latestState.clips);
+  const originalOrder = clipIdsInCurrentSortOrder(latestState.clips);
+  const originalIndex = originalOrder.indexOf(clip.id);
+  if (originalIndex < 0) return;
   const captureElement = config.captureElement || row;
   clipReorderState = {
     clipId: clip.id,
-    originalIndex: index,
-    currentDropIndex: index,
+    originalIndex,
+    currentDropIndex: originalIndex,
     originalOrder,
     startX: event.clientX,
     startY: event.clientY,
@@ -1546,7 +1613,11 @@ function beginClipReorder(event, clip, index, row, options) {
     format: "frames",
     lastPoint: eventPoint(event),
     ghostX: 0,
-    ghostY: 0
+    ghostY: 0,
+    switchedToCustom: false,
+    sourceSortMode: null,
+    sourceSortDirection: null,
+    sourceClips: null
   };
 
   if (row) row.classList.add("is-reorder-pressed");
@@ -4238,7 +4309,7 @@ function createClipPositionRow(entry, slotIndex, fps) {
     item.setAttribute("role", "button");
     item.setAttribute("aria-pressed", clip.selected ? "true" : "false");
     item.onpointerdown = function (event) {
-      beginClipReorder(event, clip, index, row, { source: "card", card: item, captureElement: item });
+      beginClipReorder(event, clip, row, { source: "card", card: item, captureElement: item });
     };
     item.onclick = function (event) {
       if (suppressNextClipClickId === clip.id) {

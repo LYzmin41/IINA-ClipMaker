@@ -178,16 +178,20 @@ test("clip sorting controls expose the required menu, direction icons, and acces
   assert.match(sidebarHtml, /id="clipSortMenu"[^>]*role="menu"/);
   const labels = matches(sidebarHtml, /class="clip-sort-menu-item"[\s\S]*?<span>([^<]+)<\/span><\/button>/g);
   assert.deepEqual(labels, [
+    "Custom",
     "Creation Order",
     "Name",
     "Duration",
     "Timeline Position (In)",
     "Timeline Position (Out)",
   ]);
-  assert.equal((sidebarHtml.match(/role="menuitemradio"/g) || []).length, 5);
+  assert.equal((sidebarHtml.match(/role="menuitemradio"/g) || []).length, 6);
+  assert.match(sidebarHtml, /data-sort-mode="custom" aria-checked="false" tabindex="-1"/);
   assert.match(sidebarHtml, /data-sort-mode="creation" aria-checked="true" tabindex="0"/);
   assert.match(sidebarHtml, /assets\/sort-ascending\.svg/);
   assert.match(sidebarHtml, /assets\/sort-descending\.svg/);
+  assert.match(read("sidebar.js"), /button\.addEventListener\("contextmenu", handleClipSortContextMenu\)/);
+  assert.match(read("sidebar.js"), /\.clip-position-slot:not\(\.clip-drag-placeholder\)/);
   assert.match(sidebarHtml, /clip-sort-icon-glyph-ascending[^>]*data-approved-asset="assets\/sort-ascending\.svg"[\s\S]*?<svg viewBox="0 0 24 24"[\s\S]*?M5 19V5/);
   assert.match(sidebarHtml, /clip-sort-icon-glyph-descending[^>]*data-approved-asset="assets\/sort-descending\.svg"[\s\S]*?<svg viewBox="0 0 24 24"[\s\S]*?M5 5v14/);
   assert.match(sidebarHtml, /data-sort-direction="ascending"/);

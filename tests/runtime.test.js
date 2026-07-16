@@ -385,7 +385,7 @@ test("new clips appear first while identity, selection, rename, and reorder rema
   await runtime.callRpc("$renameClip", 1, "  Привет / intro  ");
   await runtime.callRpc("$toggleClipSelection", 1);
   await runtime.callRpc("$toggleClipSelection", 2);
-  state = await runtime.callRpc("$reorderClips", [1, 3, 2]);
+  state = await runtime.callRpc("$reorderClips", [1, 3, 2], true);
   assert.deepEqual(Array.from(state.clips, (clip) => clip.id), [1, 3, 2]);
   assert.deepEqual(Array.from(state.clips, (clip) => clip.creationSequence), [1, 3, 2]);
   assert.equal(state.clips[0].name, "Привет - intro");
@@ -395,7 +395,7 @@ test("new clips appear first while identity, selection, rename, and reorder rema
   assert.deepEqual(Array.from(state.clips, (clip) => clip.id), [1, 3, 2]);
 });
 
-test("sorting settings persist, legacy creation sequences migrate, and insertion preference affects only manual order", async (t) => {
+test("sorting settings persist, legacy creation sequences migrate, and insertion preference affects custom order", async (t) => {
   const runtime = createRuntime();
   t.after(() => runtime.cleanup());
   await runtime.emit("iina.window-loaded");
@@ -409,8 +409,10 @@ test("sorting settings persist, legacy creation sequences migrate, and insertion
   let state = await runtime.callRpc("$getState");
   assert.deepEqual(Array.from(state.clips, (clip) => [clip.id, clip.creationSequence]), [[8, 3], [2, 1], [5, 2]]);
 
-  state = await runtime.callRpc("$reorderClips", [5, 8, 2]);
+  state = await runtime.callRpc("$reorderClips", [5, 8, 2], true);
   assert.deepEqual(Array.from(state.clips, (clip) => [clip.id, clip.creationSequence]), [[5, 2], [8, 3], [2, 1]]);
+  assert.equal(state.clipSortMode, "custom");
+  assert.equal(state.clipSortDirection, "ascending");
 
   state = await runtime.callRpc("$setClipSort", "duration", "descending");
   assert.equal(state.clipSortMode, "duration");
@@ -420,7 +422,7 @@ test("sorting settings persist, legacy creation sequences migrate, and insertion
   state = await runtime.callRpc("$reorderClips", [2, 8, 5]);
   assert.deepEqual(Array.from(state.clips, (clip) => clip.id), [5, 8, 2]);
 
-  runtime.preferences.set("clipSortMode", "manual");
+  runtime.preferences.set("clipSortMode", "custom");
   runtime.preferences.set("clipSortDirection", "ascending");
   runtime.preferences.set("addNewClipsToTop", false);
   internalState.inPoint = 10;
@@ -430,7 +432,7 @@ test("sorting settings persist, legacy creation sequences migrate, and insertion
   assert.equal(state.clips.at(-1).creationSequence, 4);
 
   const beforeReset = Array.from(state.clips, (clip) => [clip.id, clip.creationSequence]);
-  runtime.preferences.set("clipSortMode", "manual");
+  runtime.preferences.set("clipSortMode", "custom");
   runtime.preferences.set("clipSortDirection", "ascending");
   runtime.preferences.set("addNewClipsToTop", true);
   state = await runtime.callRpc("$getState");
@@ -438,7 +440,36 @@ test("sorting settings persist, legacy creation sequences migrate, and insertion
   assert.equal(state.addNewClipsToTop, true);
 });
 
-test("derived sorting is stable, preserves manual order, and runs after search", () => {
+test("Custom captures the previous sort and drag switching saves the dropped order atomically", async (t) => {
+  const runtime = createRuntime();
+  t.after(() => runtime.cleanup());
+  await runtime.emit("iina.window-loaded");
+
+  const internalState = runtime.evaluate("state");
+  internalState.clips = [
+    { id: 1, name: "Beta", inPoint: 3, outPoint: 4, duration: 1 },
+    { id: 2, name: "Alpha", inPoint: 1, outPoint: 2, duration: 1 },
+    { id: 3, name: "Gamma", inPoint: 5, outPoint: 6, duration: 1 },
+  ];
+
+  await runtime.callRpc("$setClipSort", "name", "ascending");
+  let state = await runtime.callRpc("$setClipSort", "custom", "descending");
+  assert.equal(state.clipSortMode, "custom");
+  assert.equal(state.clipSortDirection, "ascending");
+  assert.deepEqual(Array.from(state.clips, (clip) => clip.id), [2, 1, 3]);
+
+  await runtime.callRpc("$setClipSort", "in", "ascending");
+  state = await runtime.callRpc("$reorderClips", [3, 2, 1], true);
+  assert.equal(state.clipSortMode, "custom");
+  assert.equal(state.clipSortDirection, "ascending");
+  assert.deepEqual(Array.from(state.clips, (clip) => clip.id), [3, 2, 1]);
+
+  runtime.preferences.set("clipSortMode", "manual");
+  state = await runtime.callRpc("$getState");
+  assert.equal(state.clipSortMode, "custom");
+});
+
+test("derived sorting is stable, preserves custom order, and runs after search", () => {
   const result = sidebarEvaluate(`(() => {
     const clips = [
       { id: 40, creationSequence: 4, name: "Beta match", duration: 2, inPoint: 8, outPoint: 10 },
@@ -453,10 +484,10 @@ test("derived sorting is stable, preserves manual order, and runs after search",
       latestState = { clipSortMode: mode, clipSortDirection: mode === "creation" ? "descending" : "ascending" };
       orders[mode] = displayedClipEntries(clips).map((entry) => entry.clip.id);
     }
-    latestState = { clipSortMode: "manual", clipSortDirection: "ascending" };
-    orders.manual = displayedClipEntries(clips).map((entry) => entry.clip.id);
-    latestState.clipSortDirection = "descending";
-    orders.manualDescending = displayedClipEntries(clips).map((entry) => entry.clip.id);
+    latestState = { clipSortMode: "custom", clipSortDirection: "ascending" };
+    orders.custom = displayedClipEntries(clips).map((entry) => entry.clip.id);
+    latestState = { clipSortMode: "manual", clipSortDirection: "descending" };
+    orders.legacyManual = displayedClipEntries(clips).map((entry) => entry.clip.id);
     return { orders, original, after: clips.map((clip) => clip.id).join(",") };
   })()`);
 
@@ -465,9 +496,84 @@ test("derived sorting is stable, preserves manual order, and runs after search",
   assert.deepEqual(Array.from(result.orders.duration), [10, 20, 40]);
   assert.deepEqual(Array.from(result.orders.in), [10, 20, 40]);
   assert.deepEqual(Array.from(result.orders.out), [10, 20, 40]);
-  assert.deepEqual(Array.from(result.orders.manual), [40, 20, 10]);
-  assert.deepEqual(Array.from(result.orders.manualDescending), [10, 20, 40]);
+  assert.deepEqual(Array.from(result.orders.custom), [40, 20, 10]);
+  assert.deepEqual(Array.from(result.orders.legacyManual), [40, 20, 10]);
   assert.equal(result.original, result.after);
+});
+
+test("starting a drag from a derived sort preserves that order while switching to Custom", () => {
+  const result = sidebarEvaluate(`(() => {
+    latestState = {
+      clipSortMode: "name",
+      clipSortDirection: "ascending",
+      clips: [
+        { id: 1, name: "Beta" },
+        { id: 2, name: "Alpha" },
+        { id: 3, name: "Gamma" },
+      ],
+    };
+    clipReorderState = {
+      originalOrder: [2, 1, 3],
+      switchedToCustom: false,
+      sourceSortMode: null,
+      sourceSortDirection: null,
+      sourceClips: null,
+    };
+    updateClipSortControl = () => {};
+    activeClipSearchQuery = "";
+    const dragAllowedInName = clipReorderIsAllowed();
+    activeClipSearchQuery = "Alpha";
+    const dragAllowedWithSearch = clipReorderIsAllowed();
+    activeClipSearchQuery = "";
+    activateCustomSortForClipDrag();
+    const switched = {
+      mode: latestState.clipSortMode,
+      direction: latestState.clipSortDirection,
+      order: latestState.clips.map((clip) => clip.id),
+      switchedToCustom: clipReorderState.switchedToCustom,
+    };
+    const dragState = clipReorderState;
+    restoreClipSortAfterCanceledDrag(dragState);
+    const restored = {
+      mode: latestState.clipSortMode,
+      direction: latestState.clipSortDirection,
+      order: latestState.clips.map((clip) => clip.id),
+    };
+    return { switched, restored, dragAllowedInName, dragAllowedWithSearch };
+  })()`);
+
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), {
+    switched: { mode: "custom", direction: "ascending", order: [2, 1, 3], switchedToCustom: true },
+    restored: { mode: "name", direction: "ascending", order: [1, 2, 3] },
+    dragAllowedInName: true,
+    dragAllowedWithSearch: false,
+  });
+});
+
+test("drag insertion zones use neighboring card halves and keep the source slot stable", () => {
+  const result = sidebarEvaluate(`(() => {
+    const centers = [100, 200, 300, 500, 600];
+    clipRowsForDrop = () => centers.map((center) => ({
+      getBoundingClientRect() { return { top: center - 40, height: 80 }; },
+    }));
+    clipReorderState = { originalOrder: [1, 2, 3, 4, 5, 6] };
+    const probes = [50, 150, 250, 350, 450, 550, 650]
+      .map((pointerY) => [pointerY, clipDropIndexFromPointerY(pointerY)]);
+    const original = clipReorderState.originalOrder;
+    return {
+      probes,
+      unchanged: moveClipIdToDropIndex(original, 4, 3, 3),
+      oneSlotUp: moveClipIdToDropIndex(original, 4, 3, 2),
+      oneSlotDown: moveClipIdToDropIndex(original, 4, 3, 4),
+    };
+  })()`);
+
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), {
+    probes: [[50, 0], [150, 1], [250, 2], [350, 3], [450, 3], [550, 4], [650, 5]],
+    unchanged: [1, 2, 3, 4, 5, 6],
+    oneSlotUp: [1, 2, 4, 3, 5, 6],
+    oneSlotDown: [1, 2, 3, 5, 4, 6],
+  });
 });
 
 test("active menu selection and Shift reversal keep the current sorting type", () => {
@@ -499,6 +605,48 @@ test("active menu selection and Shift reversal keep the current sorting type", (
     return requested;
   })()`);
   assert.deepEqual(Array.from(shifted), ["duration", "descending"]);
+
+  const custom = sidebarEvaluate(`(() => {
+    latestState = { clipSortMode: "name", clipSortDirection: "descending" };
+    let requested = null;
+    closeClipSortMenu = () => {};
+    requestClipSort = (mode, direction) => { requested = [mode, direction]; };
+    selectClipSortMode("custom");
+    return requested;
+  })()`);
+  assert.deepEqual(Array.from(custom), ["custom", "ascending"]);
+
+  const customReverse = sidebarEvaluate(`(() => {
+    latestState = { clipSortMode: "custom", clipSortDirection: "ascending" };
+    let requested = null;
+    requestClipSort = (mode, direction) => { requested = [mode, direction]; };
+    reverseCurrentClipSortDirection();
+    return requested;
+  })()`);
+  assert.equal(customReverse, null);
+});
+
+test("right-clicking Sort suppresses the context menu and reverses like Shift-click", () => {
+  const result = sidebarEvaluate(`(() => {
+    latestState = { clipSortMode: "name", clipSortDirection: "ascending" };
+    const calls = [];
+    closeClipSortMenu = (restoreFocus) => { calls.push(["close", restoreFocus]); };
+    requestClipSort = (mode, direction) => { calls.push(["sort", mode, direction]); };
+    const event = {
+      prevented: false,
+      stopped: false,
+      preventDefault() { this.prevented = true; },
+      stopPropagation() { this.stopped = true; },
+    };
+    handleClipSortContextMenu(event);
+    return { calls, prevented: event.prevented, stopped: event.stopped };
+  })()`);
+
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), {
+    calls: [["close", false], ["sort", "name", "descending"]],
+    prevented: true,
+    stopped: true,
+  });
 });
 
 test("sort icon hydrates without animation and animates only a real direction change", () => {
@@ -523,10 +671,10 @@ test("sort icon hydrates without animation and animates only a real direction ch
     clearTimeout = () => {};
     setTimeout = () => 1;
 
-    updateClipSortControl({ clipSortMode: "manual", clipSortDirection: "descending" });
-    updateClipSortControl({ clipSortMode: "manual", clipSortDirection: "descending" });
-    updateClipSortControl({ clipSortMode: "manual", clipSortDirection: "ascending" });
-    updateClipSortControl({ clipSortMode: "name", clipSortDirection: "ascending" });
+    updateClipSortControl({ clipSortMode: "creation", clipSortDirection: "descending" });
+    updateClipSortControl({ clipSortMode: "creation", clipSortDirection: "descending" });
+    updateClipSortControl({ clipSortMode: "creation", clipSortDirection: "ascending" });
+    updateClipSortControl({ clipSortMode: "custom", clipSortDirection: "descending" });
 
     return {
       animationAdds: button.classList.animationAdds,
@@ -537,10 +685,10 @@ test("sort icon hydrates without animation and animates only a real direction ch
 
   assert.deepEqual(Array.from(result.animationAdds), ["is-changing-to-ascending"]);
   assert.equal(result.direction, "ascending");
-  assert.equal(result.label, "Sort clips, ascending");
+  assert.equal(result.label, "Sort clips, custom order");
 });
 
-test("initial manual order is represented by a checked Creation Order menu item", () => {
+test("Custom is represented by the first checked sort menu item", () => {
   const result = sidebarEvaluate(`(() => {
     const makeItem = (mode) => ({
       dataset: { sortMode: mode },
@@ -548,7 +696,7 @@ test("initial manual order is represented by a checked Creation Order menu item"
       tabIndex: -1,
       setAttribute(name, value) { this.attributes[name] = value; },
     });
-    const items = ["creation", "name", "duration", "in", "out"].map(makeItem);
+    const items = ["custom", "creation", "name", "duration", "in", "out"].map(makeItem);
     const button = {
       dataset: {},
       classList: { add() {}, remove() {}, toggle() {} },
@@ -557,7 +705,7 @@ test("initial manual order is represented by a checked Creation Order menu item"
     $ = (id) => id === "clipSortButton" ? button : null;
     clipSortMenuItems = () => items;
 
-    updateClipSortControl({ clipSortMode: "manual", clipSortDirection: "ascending" });
+    updateClipSortControl({ clipSortMode: "custom", clipSortDirection: "ascending" });
     const initial = items.map((item) => ({ mode: item.dataset.sortMode, checked: item.attributes["aria-checked"], tabIndex: item.tabIndex }));
     updateClipSortControl({ clipSortMode: "duration", clipSortDirection: "ascending" });
     const selected = items.map((item) => ({ mode: item.dataset.sortMode, checked: item.attributes["aria-checked"], tabIndex: item.tabIndex }));
@@ -566,13 +714,15 @@ test("initial manual order is represented by a checked Creation Order menu item"
 
   assert.deepEqual(JSON.parse(JSON.stringify(result)), {
     initial: [
-      { mode: "creation", checked: "true", tabIndex: 0 },
+      { mode: "custom", checked: "true", tabIndex: 0 },
+      { mode: "creation", checked: "false", tabIndex: -1 },
       { mode: "name", checked: "false", tabIndex: -1 },
       { mode: "duration", checked: "false", tabIndex: -1 },
       { mode: "in", checked: "false", tabIndex: -1 },
       { mode: "out", checked: "false", tabIndex: -1 },
     ],
     selected: [
+      { mode: "custom", checked: "false", tabIndex: -1 },
       { mode: "creation", checked: "false", tabIndex: -1 },
       { mode: "name", checked: "false", tabIndex: -1 },
       { mode: "duration", checked: "true", tabIndex: 0 },
@@ -1102,6 +1252,8 @@ test("export snapshots order and titles, keeps modes distinct, and honors reveal
     { id: 1, name: "First", sourceFilePath: runtime.sourcePath, sourceFileDisplayName: "source", inPoint: 1, outPoint: 3, duration: 2, exportStatus: "pending", outputPath: "" },
     { id: 2, name: "Second.mp4", sourceFilePath: runtime.sourcePath, sourceFileDisplayName: "source", inPoint: 4, outPoint: 7.25, duration: 3.25, exportStatus: "pending", outputPath: "" },
   ];
+  runtime.preferences.set("clipSortMode", "custom");
+  runtime.preferences.set("clipSortDirection", "ascending");
 
   const exportPromise = runtime.callRpc("$exportAll");
   await firstExportStarted;

@@ -84,9 +84,9 @@ The sidebar displays compact frame-based values such as `3s 18f`, `2m 04s 00f`, 
 
 ## Clip organization
 
-Search filters the visible list. Sort supports Creation Order, Name, Duration, Timeline Position (In), and Timeline Position (Out). Selecting the active sort option again, or Shift-clicking the Sort button, reverses its direction.
+Search filters the visible list. Sort supports Custom, Creation Order, Name, Duration, Timeline Position (In), and Timeline Position (Out). Selecting an active derived sort option again, Shift-clicking the Sort button, or right-clicking it reverses the direction.
 
-Sorting is a derived view and does not rewrite manual order. Drag reordering is available only in ascending Manual order with an empty search. Export Selected and Export All follow the current visible order.
+Choosing Custom preserves the complete order from the previous sort and enables manual card reordering. Dragging a card from any other sort switches to Custom automatically without first changing the visible sequence. Dragging remains unavailable while search is filtering the list. Export Selected and Export All follow the current visible order.
 
 ## Export modes
 
