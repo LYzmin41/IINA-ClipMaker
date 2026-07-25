@@ -462,16 +462,16 @@ test("shortcut settings rebuild real menu bindings and programmatic settings are
   assert.equal(runtime.preferenceSyncCount, beforeSortSync + 1);
 });
 
-test("FFmpeg-full setup browse actions return Finder folder and file selections", async (t) => {
+test("FFmpeg-full setup browse actions open at a detected folder and resolve selections", async (t) => {
   const runtime = createRuntime({
     async exec(call) {
       if (call.executable !== "/usr/bin/osascript") return undefined;
       const script = call.args.join("\n");
-      if (script.includes("choose folder")) {
+      if (script.includes("Choose where to install FFmpeg-full")) {
         return { status: 0, stdout: "/Users/tester/Tools/FFmpeg-full/\n", stderr: "" };
       }
-      if (script.includes("choose file")) {
-        return { status: 0, stdout: "/Users/tester/bin/ffmpeg\n", stderr: "" };
+      if (script.includes("Choose the existing FFmpeg-full folder")) {
+        return { status: 0, stdout: "/opt/homebrew/opt/ffmpeg-full/\n", stderr: "" };
       }
       return undefined;
     },
@@ -484,7 +484,14 @@ test("FFmpeg-full setup browse actions return Finder folder and file selections"
   assert.equal(directory.ok, true);
   assert.equal(directory.path, "/Users/tester/Tools/FFmpeg-full");
   assert.equal(executable.ok, true);
-  assert.equal(executable.path, "/Users/tester/bin/ffmpeg");
+  assert.equal(executable.path, "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg");
+
+  const pickerCall = runtime.execCalls.find((call) => (
+    call.executable === "/usr/bin/osascript" &&
+    call.args.includes('set pickerPrompt to "Choose the existing FFmpeg-full folder"')
+  ));
+  assert.ok(pickerCall);
+  assert.deepEqual(pickerCall.args.slice(-2), ["--", "/opt/homebrew/opt/ffmpeg-full"]);
 });
 
 test("Show Containing Folder opens the configured folder and remembers a chosen export folder", async (t) => {

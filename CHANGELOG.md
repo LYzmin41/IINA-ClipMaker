@@ -14,6 +14,7 @@ All notable changes to ClipMaker are documented in this file.
 - Delegate the entire sidebar background to IINA's native transparent WebView material so the plugin and tab header always share the same video-derived tone.
 - Keep the Clips toolbar fully transparent while clipping scrolling cards at its lower edge, so it inherits IINA's native material without adding its own tint.
 - Let the clip search field use the space released by the compact selection controls while preserving narrow-sidebar collision guards.
+- Open the existing FFmpeg-full folder picker at an automatically detected installation when possible.
 - Update settings and documentation to refer to FFmpeg-full.
 - Align radio and numeric preference controls with IINA's native binding rules, and persist programmatic path and sorting changes immediately.
 - Remove the unused alert permission and obsolete fallback code while retaining compatibility with IINA 1.4.0 and newer.

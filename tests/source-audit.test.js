@@ -191,7 +191,7 @@ test("FFmpeg-full setup blocks the sidebar and preserves explicit installation p
   assert.match(sidebarHtml, /id="toggleCustomFfmpegButton"[^>]*>FFmpeg-full Setup Options…<\/button>/);
   assert.match(sidebarHtml, /id="ffmpegInstallationDirectory"/);
   assert.match(sidebarHtml, /id="browseFfmpegInstallationDirectory"[^>]*aria-label="Browse installation directory"/);
-  assert.match(sidebarHtml, /id="browseExistingFfmpegFull"[^>]*aria-label="Browse existing FFmpeg-full executable"/);
+  assert.match(sidebarHtml, /id="browseExistingFfmpegFull"[^>]*aria-label="Browse existing FFmpeg-full folder"/);
   assert.match(sidebarHtml, /src="assets\/folder\.svg"/);
   assert.match(sidebarHtml, /for="ffmpegInstallationDirectory">FFmpeg-full installation directory<\/label>/);
   assert.match(sidebarHtml, /Choose a folder, then click Install FFmpeg-full\.<br>Leave blank to use the default location\./);
@@ -199,7 +199,7 @@ test("FFmpeg-full setup blocks the sidebar and preserves explicit installation p
   assert.match(sidebarHtml, /Quit and reopen IINA/);
   assert.match(sidebarJs, /rpc\.\$installFfmpegFull\(\{ installationDirectory \}\)/);
   assert.match(sidebarJs, /rpc\.\$browseFfmpegInstallationDirectory\(\)/);
-  assert.match(sidebarJs, /rpc\.\$browseExistingFfmpegFull\(\)/);
+  assert.match(sidebarJs, /rpc\.\$browseExistingFfmpegFull\(\{ currentPath \}\)/);
   assert.match(sidebarJs, /rpc\.\$useExistingFfmpegFull\(\{ ffmpegPath \}\)/);
   assert.match(mainJs, /utils\.exec\(homebrew\.path, \["install", "ffmpeg-full"\]/);
   assert.match(mainJs, /validateInstallationDirectory\(requestedInstallationDirectory\)/);

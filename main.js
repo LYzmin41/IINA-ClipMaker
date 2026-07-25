@@ -1378,6 +1378,18 @@ function homebrewPathFromInstallationDirectory(value) {
   return directory ? `${directory}/bin/brew` : "";
 }
 
+function ffmpegFullDirectoryFromPath(value) {
+  const candidate = normalizeFolderPath(value);
+  if (!candidate) return "";
+  if (candidate.endsWith("/bin/ffmpeg")) {
+    return normalizeFolderPath(dirname(dirname(candidate)));
+  }
+  if (candidate.endsWith("/ffmpeg")) {
+    return normalizeFolderPath(dirname(candidate));
+  }
+  return candidate;
+}
+
 function ffmpegPreferenceSignature() {
   return JSON.stringify([
     normalizeFfmpegPathPreference(pref("ffmpegPath", "")),
@@ -2576,19 +2588,85 @@ async function chooseFfmpegInstallationDirectory() {
   }
 }
 
-async function chooseExistingFfmpegFullExecutable() {
+async function findExistingFfmpegFullPickerDirectory(currentPath) {
+  const requestedPath = normalizeFfmpegPathPreference(currentPath);
+  if (requestedPath && file.exists(requestedPath)) {
+    return ffmpegFullDirectoryFromPath(requestedPath);
+  }
+
+  const detected = await findDetectedFfmpegFull();
+  if (isDisposed) return "";
+  if (detected && detected.valid && detected.path) {
+    return ffmpegFullDirectoryFromPath(detected.path);
+  }
+
   try {
-    const result = await utils.exec("/usr/bin/osascript", [
+    const result = await execWithSoftTimeout(
+      "/usr/bin/mdfind",
+      ['kMDItemFSName == "ffmpeg"c && kMDItemPath == "*ffmpeg-full*"c'],
+      null,
+      1800
+    );
+    if (isDisposed || !result || result.status !== 0 || result.timedOut) return "";
+    const candidate = String(result.stdout || "")
+      .split(/\r?\n/)
+      .map((path) => normalizeFfmpegPathPreference(path))
+      .find((path) => (
+        (path.endsWith("/bin/ffmpeg") && file.exists(path)) ||
+        (path.endsWith("/ffmpeg-full") && file.exists(`${path}/bin/ffmpeg`))
+      ));
+    return candidate ? ffmpegFullDirectoryFromPath(candidate) : "";
+  } catch (error) {
+    logError("Could not locate an FFmpeg-full folder for the picker", error);
+    return "";
+  }
+}
+
+function existingFfmpegFullExecutableFromFolder(folder) {
+  const selectedFolder = normalizeFolderPath(folder);
+  if (!selectedFolder) return "";
+  const candidates = selectedFolder.endsWith("/bin")
+    ? [`${selectedFolder}/ffmpeg`]
+    : [
+      `${selectedFolder}/bin/ffmpeg`,
+      `${selectedFolder}/ffmpeg`,
+      `${selectedFolder}/opt/ffmpeg-full/bin/ffmpeg`
+    ];
+  return candidates.find((path) => file.exists(path)) || candidates[0];
+}
+
+async function chooseExistingFfmpegFullExecutable(options) {
+  try {
+    const setupOptions = options && typeof options === "object" ? options : {};
+    const initialDirectory = await findExistingFfmpegFullPickerDirectory(setupOptions.currentPath);
+    if (isDisposed) return null;
+    const scriptArguments = [
       "-e",
-      'set chosenFile to choose file with prompt "Choose the FFmpeg-full executable"',
+      "on run argv",
       "-e",
-      "POSIX path of chosenFile"
-    ]);
+      'set pickerPrompt to "Choose the existing FFmpeg-full folder"',
+      "-e",
+      "if (count of argv) > 0 then",
+      "-e",
+      "set chosenFolder to choose folder with prompt pickerPrompt default location (POSIX file (item 1 of argv) as alias)",
+      "-e",
+      "else",
+      "-e",
+      "set chosenFolder to choose folder with prompt pickerPrompt",
+      "-e",
+      "end if",
+      "-e",
+      "return POSIX path of chosenFolder",
+      "-e",
+      "end run"
+    ];
+    if (initialDirectory) scriptArguments.push("--", initialDirectory);
+    const result = await utils.exec("/usr/bin/osascript", scriptArguments);
     if (!result || result.status !== 0) {
       if (pickerResultWasCancelled(result)) return { ok: false, cancelled: true };
-      return { ok: false, error: result && (result.stderr || result.stdout) || "Could not open the file picker" };
+      return { ok: false, error: result && (result.stderr || result.stdout) || "Could not open the folder picker" };
     }
-    const chosenPath = normalizeFfmpegPathPreference(String(result.stdout || ""));
+    const chosenPath = existingFfmpegFullExecutableFromFolder(String(result.stdout || ""));
     return chosenPath ? { ok: true, path: chosenPath } : { ok: false, cancelled: true };
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
@@ -3269,9 +3347,9 @@ function registerStableRpcMethods() {
     return chooseFfmpegInstallationDirectory();
   };
 
-  rpc.$browseExistingFfmpegFull = async function () {
+  rpc.$browseExistingFfmpegFull = async function (options) {
     if (isDisposed) return null;
-    return chooseExistingFfmpegFullExecutable();
+    return chooseExistingFfmpegFullExecutable(options);
   };
 
   rpc.$playerHotkey = function (payload) {

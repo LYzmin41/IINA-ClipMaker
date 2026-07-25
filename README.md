@@ -35,7 +35,7 @@ If Homebrew is already installed, ClipMaker launches its executable directly wit
 
 After a successful installation, quit and reopen IINA so ClipMaker can load the new executable.
 
-Managed or nonstandard systems can expand **FFmpeg-full Setup Options…** and provide an installation directory. ClipMaker prepares an isolated package-manager prefix in an empty custom directory and installs FFmpeg-full there. If the directory already contains a compatible managed prefix, ClipMaker reuses it. An existing standalone FFmpeg-full executable can also be selected directly. ClipMaker detects the standard Apple Silicon and Intel keg-only paths automatically:
+Managed or nonstandard systems can expand **FFmpeg-full Setup Options…** and provide an installation directory. ClipMaker prepares an isolated package-manager prefix in an empty custom directory and installs FFmpeg-full there. If the directory already contains a compatible managed prefix, ClipMaker reuses it. An existing FFmpeg-full installation can be selected by folder or entered as an executable path. ClipMaker detects the standard Apple Silicon and Intel keg-only paths automatically:
 
 ```text
 /opt/homebrew/opt/ffmpeg-full/bin/ffmpeg

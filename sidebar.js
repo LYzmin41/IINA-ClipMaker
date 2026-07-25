@@ -4908,7 +4908,8 @@ function bindFfmpegSetup() {
 
   if (browseExistingFfmpegButton && ffmpegInput) {
     browseExistingFfmpegButton.onclick = function () {
-      callPathPicker(() => rpc.$browseExistingFfmpegFull(), ffmpegInput);
+      const currentPath = ffmpegInput.value.trim();
+      callPathPicker(() => rpc.$browseExistingFfmpegFull({ currentPath }), ffmpegInput);
     };
   }
 
