@@ -13,15 +13,18 @@ const SIDEBAR_SOURCE = fs.readFileSync(path.join(ROOT, "sidebar.js"), "utf8");
 function createRuntime(options = {}) {
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "Info.json"), "utf8"));
   const preferences = new Map(Object.entries(manifest.preferenceDefaults || {}));
-  preferences.set("ffmpegPath", "/opt/homebrew/bin/ffmpeg");
+  preferences.set("ffmpegPath", "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg");
+  preferences.set("ffmpegFullConfirmed", true);
+  preferences.set("homebrewPath", "/opt/homebrew/bin/brew");
 
   const sourcePath = "/tmp/ClipMaker source Пример.mp4";
   const secondSourcePath = "/tmp/ClipMaker second source.mov";
   const existingFiles = new Set([
     sourcePath,
     secondSourcePath,
-    "/opt/homebrew/bin/ffmpeg",
-    "/opt/homebrew/bin/ffprobe",
+    "/opt/homebrew/bin/brew",
+    "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg",
+    "/opt/homebrew/opt/ffmpeg-full/bin/ffprobe",
   ]);
   const eventHandlers = new Map();
   const sidebarHandlers = new Map();
@@ -32,6 +35,7 @@ function createRuntime(options = {}) {
   const osdMessages = [];
   let sidebarLoadCount = 0;
   let sidebarShowCount = 0;
+  let preferenceSyncCount = 0;
   let nextListenerId = 1;
 
   const status = {
@@ -49,9 +53,24 @@ function createRuntime(options = {}) {
     const { executable, args } = call;
     if (executable === "/usr/bin/which") {
       const name = args[0];
-      if (name === "ffmpeg") return { status: 0, stdout: "/opt/homebrew/bin/ffmpeg\n", stderr: "" };
-      if (name === "ffprobe") return { status: 0, stdout: "/opt/homebrew/bin/ffprobe\n", stderr: "" };
+      if (name === "brew") return { status: 0, stdout: "/opt/homebrew/bin/brew\n", stderr: "" };
+      if (name === "ffmpeg") return { status: 0, stdout: "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg\n", stderr: "" };
+      if (name === "ffprobe") return { status: 0, stdout: "/opt/homebrew/opt/ffmpeg-full/bin/ffprobe\n", stderr: "" };
       return { status: 1, stdout: "", stderr: "not found" };
+    }
+    if (executable.endsWith("/brew")) {
+      if (args[0] === "--version") return { status: 0, stdout: "Homebrew 5.0.0\n", stderr: "" };
+      if (args[0] === "--prefix" && args.length === 1) {
+        return { status: 0, stdout: `${path.dirname(path.dirname(executable))}\n`, stderr: "" };
+      }
+      if (args[0] === "--prefix" && args[1] === "ffmpeg-full") {
+        return { status: 0, stdout: "/opt/homebrew/opt/ffmpeg-full\n", stderr: "" };
+      }
+      if (args[0] === "install" && args[1] === "ffmpeg-full") {
+        existingFiles.add("/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg");
+        existingFiles.add("/opt/homebrew/opt/ffmpeg-full/bin/ffprobe");
+        return { status: 0, stdout: "installed ffmpeg-full\n", stderr: "" };
+      }
     }
     if (executable === "/usr/bin/osascript") {
       return { status: 0, stdout: "/tmp/ClipMaker exports/\n", stderr: "" };
@@ -64,7 +83,11 @@ function createRuntime(options = {}) {
       return { status: 0, stdout: "", stderr: "" };
     }
     if (executable.endsWith("/ffmpeg") && args[0] === "-version") {
-      return { status: 0, stdout: "ffmpeg version 8.1 test\n", stderr: "" };
+      return {
+        status: 0,
+        stdout: "ffmpeg version 8.1 test\nconfiguration: --prefix=/opt/homebrew/Cellar/ffmpeg-full/8.1 --enable-libvidstab --enable-libvmaf --enable-libopencore-amrnb --enable-libopencore-amrwb\n",
+        stderr: "",
+      };
     }
     if (executable.endsWith("/ffprobe")) {
       return {
@@ -173,6 +196,9 @@ function createRuntime(options = {}) {
       set(key, value) {
         preferences.set(key, value);
       },
+      sync() {
+        preferenceSyncCount += 1;
+      },
     },
     sidebar: {
       loadFile(fileName) {
@@ -204,7 +230,7 @@ function createRuntime(options = {}) {
         return String(value).replace(/^~(?=\/|$)/, "/Users/tester");
       },
       prompt() {
-        return "/opt/homebrew/bin/ffmpeg";
+        return "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg";
       },
     },
   };
@@ -268,6 +294,9 @@ function createRuntime(options = {}) {
     get sidebarShowCount() {
       return sidebarShowCount;
     },
+    get preferenceSyncCount() {
+      return preferenceSyncCount;
+    },
     cleanup() {
       vm.runInContext('cleanup("test")', context);
     },
@@ -321,14 +350,18 @@ test("stable lifecycle loads one sidebar and registers only called RPC methods",
     .sort();
   assert.deepEqual(rpcNames, [
     "$addClip",
+    "$browseExistingFfmpegFull",
+    "$browseFfmpegInstallationDirectory",
     "$clearClipSelection",
     "$clearList",
     "$deleteClip",
     "$deleteSelectedClips",
     "$exportAll",
     "$exportSelected",
+    "$checkFfmpegFull",
     "$getNavigationSnapshot",
     "$getState",
+    "$installFfmpegFull",
     "$playerHotkey",
     "$previewPlay",
     "$renameClip",
@@ -337,15 +370,121 @@ test("stable lifecycle loads one sidebar and registers only called RPC methods",
     "$showExportFolder",
     "$setClipSort",
     "$setClipViewOrder",
-    "$setFfmpeg",
     "$setIn",
     "$setMarkTime",
     "$setOut",
     "$setPositionTime",
     "$toggleClipSelection",
+    "$useExistingFfmpegFull",
   ].sort());
 
   assert.equal(runtime.menuRoots.length, 1);
+});
+
+test("every sidebar behavior setting reaches the state or its concrete action", async (t) => {
+  const runtime = createRuntime();
+  t.after(() => runtime.cleanup());
+  runtime.preferences.set("invertTimecodeScrolling", true);
+  runtime.preferences.set("invertTimecodeDragging", true);
+  runtime.preferences.set("timecodeScrollSensitivity", 5);
+  runtime.preferences.set("timecodeDragSensitivity", 1);
+  runtime.preferences.set("deleteWithoutConfirmation", true);
+  runtime.preferences.set("showSidebarOnInvalidExport", false);
+  await runtime.emit("iina.window-loaded");
+
+  const state = await runtime.callRpc("$getState");
+  assert.equal(state.invertTimecodeScrolling, true);
+  assert.equal(state.invertTimecodeDragging, true);
+  assert.equal(state.timecodeScrollSensitivity, 5);
+  assert.equal(state.timecodeDragSensitivity, 1);
+  assert.equal(state.deleteWithoutConfirmation, true);
+
+  const sidebarBehavior = sidebarEvaluate(`(() => {
+    latestState = ${JSON.stringify({
+      invertTimecodeScrolling: state.invertTimecodeScrolling,
+      invertTimecodeDragging: state.invertTimecodeDragging,
+      timecodeScrollSensitivity: state.timecodeScrollSensitivity,
+      timecodeDragSensitivity: state.timecodeDragSensitivity,
+      deleteWithoutConfirmation: state.deleteWithoutConfirmation,
+    })};
+    return {
+      scrollDirection: getTimecodeScrollDirectionMultiplier(),
+      dragDirection: getTimecodeDragDirectionMultiplier(),
+      scrollSensitivity: currentTimecodeScrollSensitivity(),
+      dragSensitivity: currentTimecodeDragSensitivity(),
+      confirmationEnabled: deleteConfirmationEnabled(),
+    };
+  })()`);
+  assert.deepEqual(JSON.parse(JSON.stringify(sidebarBehavior)), {
+    scrollDirection: -1,
+    dragDirection: -1,
+    scrollSensitivity: 5,
+    dragSensitivity: 1,
+    confirmationEnabled: false,
+  });
+
+  const exportAll = runtime.menuRoots[0].children.find((item) => item.title === "Export All Clips");
+  assert.equal(typeof exportAll.action, "function");
+  await exportAll.action();
+  assert.equal(runtime.sidebarShowCount, 0);
+
+  runtime.preferences.set("showSidebarOnInvalidExport", "true");
+  await exportAll.action();
+  assert.equal(runtime.sidebarShowCount, 1);
+});
+
+test("shortcut settings rebuild real menu bindings and programmatic settings are synced", async (t) => {
+  const runtime = createRuntime();
+  t.after(() => runtime.cleanup());
+  runtime.preferences.set("shortcutShowPanel", "");
+  runtime.preferences.set("shortcutSetIn", "Meta+Alt+1");
+  await runtime.emit("iina.window-loaded");
+
+  let root = runtime.menuRoots[0];
+  let showPanelItem = root.children.find((item) => item.title === "Show ClipMaker Panel");
+  let setInItem = root.children.find((item) => item.title === "Set In Point");
+  assert.equal(showPanelItem.options.keyBinding, undefined);
+  assert.equal(setInItem.options.keyBinding, "Meta+Alt+1");
+
+  runtime.preferences.set("shortcutShowPanel", "Meta+Shift+P");
+  runtime.preferences.set("shortcutSetIn", "");
+  runtime.evaluate("refreshShortcutMenuIfPreferenceChanged(true)");
+  root = runtime.menuRoots[0];
+  showPanelItem = root.children.find((item) => item.title === "Show ClipMaker Panel");
+  setInItem = root.children.find((item) => item.title === "Set In Point");
+  assert.equal(showPanelItem.options.keyBinding, "Meta+Shift+P");
+  assert.equal(setInItem.options.keyBinding, undefined);
+
+  const beforeSortSync = runtime.preferenceSyncCount;
+  await runtime.callRpc("$setClipSort", "name", "ascending");
+  assert.equal(runtime.preferences.get("clipSortMode"), "name");
+  assert.equal(runtime.preferences.get("clipSortDirection"), "ascending");
+  assert.equal(runtime.preferenceSyncCount, beforeSortSync + 1);
+});
+
+test("FFmpeg-full setup browse actions return Finder folder and file selections", async (t) => {
+  const runtime = createRuntime({
+    async exec(call) {
+      if (call.executable !== "/usr/bin/osascript") return undefined;
+      const script = call.args.join("\n");
+      if (script.includes("choose folder")) {
+        return { status: 0, stdout: "/Users/tester/Tools/FFmpeg-full/\n", stderr: "" };
+      }
+      if (script.includes("choose file")) {
+        return { status: 0, stdout: "/Users/tester/bin/ffmpeg\n", stderr: "" };
+      }
+      return undefined;
+    },
+  });
+  t.after(() => runtime.cleanup());
+  await runtime.emit("iina.window-loaded");
+
+  const directory = await runtime.callRpc("$browseFfmpegInstallationDirectory");
+  const executable = await runtime.callRpc("$browseExistingFfmpegFull");
+  assert.equal(directory.ok, true);
+  assert.equal(directory.path, "/Users/tester/Tools/FFmpeg-full");
+  assert.equal(executable.ok, true);
+  assert.equal(executable.path, "/Users/tester/bin/ffmpeg");
 });
 
 test("Show Containing Folder opens the configured folder and remembers a chosen export folder", async (t) => {
@@ -950,9 +1089,19 @@ test("Deselect compact state follows Search expansion and releases toolbar width
   assert.deepEqual(JSON.parse(JSON.stringify(result)), {
     collapsed: false,
     expanded: true,
-    collapsedTargetWidth: 140,
-    expandedTargetWidth: 140,
+    collapsedTargetWidth: 165,
+    expandedTargetWidth: 165,
   });
+});
+
+test("sticky Clips toolbar clips each scrolling surface exactly at its lower edge", () => {
+  const overlaps = JSON.parse(sidebarEvaluate(`JSON.stringify([
+    stickyOverlapForRects({ bottom: 120 }, { top: 160, height: 300 }),
+    stickyOverlapForRects({ bottom: 120 }, { top: 92, height: 300 }),
+    stickyOverlapForRects({ bottom: 120 }, { top: -260, height: 300 }),
+    stickyOverlapForRects(null, { top: 0, height: 100 })
+  ])`));
+  assert.deepEqual(overlaps, [0, 28, 300, 0]);
 });
 
 test("delete confirmation prefers below, falls back above, and can be forced above", () => {
@@ -1241,8 +1390,225 @@ test("a valid manual FFmpeg path has priority and an invalid override does not f
   invalidState.clips = [{ id: 1, name: "Invalid", sourceFilePath: invalid.sourcePath, sourceFileDisplayName: "source", inPoint: 1, outPoint: 2, duration: 1, exportStatus: "pending", outputPath: "" }];
   const result = await invalid.callRpc("$exportAll");
   assert.equal(result.ffmpegAvailable, false);
-  assert.match(result.lastError, /Invalid FFmpeg executable/);
+  assert.match(result.lastError, /Invalid FFmpeg-full executable/);
   assert.equal(invalid.execCalls.some((call) => call.args[0] === "-n"), false);
+});
+
+test("FFmpeg-full is mandatory and a missing formula exposes setup state", async (t) => {
+  const runtime = createRuntime();
+  t.after(() => runtime.cleanup());
+  runtime.preferences.set("ffmpegPath", "");
+  runtime.preferences.set("ffmpegFullConfirmed", false);
+  runtime.existingFiles.delete("/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg");
+  runtime.existingFiles.delete("/opt/homebrew/opt/ffmpeg-full/bin/ffprobe");
+
+  await runtime.evaluate("detectStableFfmpeg()");
+  const state = runtime.evaluate("buildStableState()");
+  assert.equal(state.ffmpegFullRequired, true);
+  assert.equal(state.ffmpegAvailable, false);
+  assert.equal(state.ffmpegCheckComplete, true);
+  assert.equal(state.ffmpegSetupPhase, "missing");
+  assert.match(state.ffmpegSetupMessage, /best experience/);
+});
+
+test("Homebrew installation uses argument arrays and requires an IINA restart", async (t) => {
+  const runtime = createRuntime();
+  t.after(() => runtime.cleanup());
+  runtime.preferences.set("ffmpegPath", "");
+  runtime.preferences.set("ffmpegFullConfirmed", false);
+  runtime.existingFiles.delete("/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg");
+  runtime.existingFiles.delete("/opt/homebrew/opt/ffmpeg-full/bin/ffprobe");
+  await runtime.emit("iina.window-loaded");
+
+  const result = await runtime.callRpc("$installFfmpegFull", {
+    installationDirectory: "/opt/homebrew",
+  });
+  const installCall = runtime.execCalls.find((call) => (
+    call.executable === "/opt/homebrew/bin/brew" &&
+    call.args[0] === "install"
+  ));
+  assert.ok(installCall);
+  assert.deepEqual(installCall.args, ["install", "ffmpeg-full"]);
+  assert.equal(result.ffmpegSetupPhase, "restart-required");
+  assert.equal(result.ffmpegRestartRequired, true);
+  assert.equal(result.ffmpegAvailable, false);
+  assert.equal(result.ffmpegFound, true);
+  assert.equal(runtime.preferences.get("ffmpegFullConfirmed"), true);
+  assert.equal(runtime.preferences.get("ffmpegPath"), "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg");
+});
+
+test("missing Homebrew opens an interactive Terminal install and can be checked later", async (t) => {
+  const runtime = createRuntime();
+  t.after(() => runtime.cleanup());
+  runtime.preferences.set("ffmpegPath", "");
+  runtime.preferences.set("ffmpegFullConfirmed", false);
+  runtime.preferences.set("homebrewPath", "");
+  runtime.existingFiles.delete("/opt/homebrew/bin/brew");
+  runtime.existingFiles.delete("/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg");
+  runtime.existingFiles.delete("/opt/homebrew/opt/ffmpeg-full/bin/ffprobe");
+  await runtime.emit("iina.window-loaded");
+
+  const opened = await runtime.callRpc("$installFfmpegFull", {});
+  const terminalCall = runtime.execCalls.find((call) => call.executable === "/usr/bin/osascript");
+  assert.ok(terminalCall);
+  assert.match(terminalCall.args.join("\n"), /Homebrew.*Terminal|Terminal[\s\S]*ffmpeg-full/i);
+  assert.equal(opened.ffmpegSetupPhase, "installing-terminal");
+  assert.equal(opened.ffmpegRestartRequired, false);
+
+  runtime.existingFiles.add("/opt/homebrew/bin/brew");
+  runtime.existingFiles.add("/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg");
+  runtime.existingFiles.add("/opt/homebrew/opt/ffmpeg-full/bin/ffprobe");
+  const checked = await runtime.callRpc("$checkFfmpegFull");
+  assert.equal(checked.ffmpegSetupPhase, "restart-required");
+  assert.equal(checked.ffmpegRestartRequired, true);
+});
+
+test("an organization path can use an existing FFmpeg-full executable", async (t) => {
+  const customFfmpeg = "/Organization/Media Tools/ffmpeg";
+  const runtime = createRuntime();
+  t.after(() => runtime.cleanup());
+  runtime.existingFiles.add(customFfmpeg);
+  await runtime.emit("iina.window-loaded");
+
+  const beforePreferenceSync = runtime.preferenceSyncCount;
+  const result = await runtime.callRpc("$useExistingFfmpegFull", {
+    ffmpegPath: customFfmpeg,
+  });
+  assert.equal(result.ffmpegSetupPhase, "ready");
+  assert.equal(result.ffmpegAvailable, true);
+  assert.equal(result.ffmpegPath, customFfmpeg);
+  assert.equal(runtime.preferences.get("ffmpegFullConfirmed"), true);
+  assert.equal(runtime.preferenceSyncCount, beforePreferenceSync + 1);
+});
+
+test("a valid installation directory installs FFmpeg-full through that location", async (t) => {
+  const installationDirectory = "/Organization/Homebrew";
+  const customBrew = `${installationDirectory}/bin/brew`;
+  const customFfmpeg = `${installationDirectory}/opt/ffmpeg-full/bin/ffmpeg`;
+  const customFfprobe = `${installationDirectory}/opt/ffmpeg-full/bin/ffprobe`;
+  const runtime = createRuntime({
+    async exec(call, controls) {
+      if (call.executable !== customBrew) return undefined;
+      if (call.args[0] === "--version") {
+        return { status: 0, stdout: "Homebrew 5.0.0\n", stderr: "" };
+      }
+      if (call.args[0] === "--prefix" && call.args.length === 1) {
+        return { status: 0, stdout: `${installationDirectory}\n`, stderr: "" };
+      }
+      if (call.args[0] === "install" && call.args[1] === "ffmpeg-full") {
+        controls.existingFiles.add(customFfmpeg);
+        controls.existingFiles.add(customFfprobe);
+        return { status: 0, stdout: "installed ffmpeg-full\n", stderr: "" };
+      }
+      if (call.args[0] === "--prefix" && call.args[1] === "ffmpeg-full") {
+        return { status: 0, stdout: `${installationDirectory}/opt/ffmpeg-full\n`, stderr: "" };
+      }
+      return undefined;
+    },
+  });
+  t.after(() => runtime.cleanup());
+  runtime.existingFiles.add(customBrew);
+  await runtime.emit("iina.window-loaded");
+
+  const result = await runtime.callRpc("$installFfmpegFull", { installationDirectory });
+  const installCall = runtime.execCalls.find((call) => (
+    call.executable === customBrew &&
+    call.args[0] === "install"
+  ));
+  assert.ok(installCall);
+  assert.deepEqual(installCall.args, ["install", "ffmpeg-full"]);
+  assert.equal(result.ffmpegSetupPhase, "restart-required");
+  assert.equal(result.ffmpegPath, customFfmpeg);
+  assert.equal(runtime.preferences.get("homebrewPath"), customBrew);
+});
+
+test("an empty installation directory is prepared and installs FFmpeg-full there", async (t) => {
+  const installationDirectory = "/Users/tester/Tools/ClipMaker";
+  const customBrew = `${installationDirectory}/bin/brew`;
+  const customFfmpeg = `${installationDirectory}/opt/ffmpeg-full/bin/ffmpeg`;
+  const customFfprobe = `${installationDirectory}/opt/ffmpeg-full/bin/ffprobe`;
+  const runtime = createRuntime({
+    async exec(call, controls) {
+      if (call.executable === "/usr/bin/git" && call.args[0] === "clone") {
+        controls.existingFiles.add(customBrew);
+        return { status: 0, stdout: "cloned Homebrew\n", stderr: "" };
+      }
+      if (call.executable !== customBrew) return undefined;
+      if (call.args[0] === "--version") {
+        return { status: 0, stdout: "Homebrew 5.0.0\n", stderr: "" };
+      }
+      if (call.args[0] === "--prefix" && call.args.length === 1) {
+        return { status: 0, stdout: `${installationDirectory}\n`, stderr: "" };
+      }
+      if (call.args[0] === "install" && call.args[1] === "ffmpeg-full") {
+        controls.existingFiles.add(customFfmpeg);
+        controls.existingFiles.add(customFfprobe);
+        return { status: 0, stdout: "installed ffmpeg-full\n", stderr: "" };
+      }
+      if (call.args[0] === "--prefix" && call.args[1] === "ffmpeg-full") {
+        return { status: 0, stdout: `${installationDirectory}/opt/ffmpeg-full\n`, stderr: "" };
+      }
+      return undefined;
+    },
+  });
+  t.after(() => runtime.cleanup());
+  await runtime.emit("iina.window-loaded");
+
+  const result = await runtime.callRpc("$installFfmpegFull", { installationDirectory });
+  const cloneCall = runtime.execCalls.find((call) => call.executable === "/usr/bin/git");
+  assert.ok(cloneCall);
+  assert.deepEqual(cloneCall.args, [
+    "clone",
+    "--depth=1",
+    "https://github.com/Homebrew/brew",
+    installationDirectory,
+  ]);
+  assert.equal(result.ffmpegSetupPhase, "restart-required");
+  assert.equal(result.ffmpegPath, customFfmpeg);
+  assert.equal(runtime.preferences.get("homebrewPath"), customBrew);
+});
+
+test("an invalid installation directory does not start an FFmpeg-full installation", async (t) => {
+  const runtime = createRuntime();
+  t.after(() => runtime.cleanup());
+  await runtime.emit("iina.window-loaded");
+
+  const result = await runtime.callRpc("$installFfmpegFull", {
+    installationDirectory: "/",
+  });
+  assert.equal(result.ffmpegSetupPhase, "error");
+  assert.match(result.lastError, /Invalid installation directory/);
+  assert.equal(runtime.execCalls.some((call) => call.executable === "/usr/bin/git"), false);
+});
+
+test("an ordinary FFmpeg executable is rejected as an existing FFmpeg-full build", async (t) => {
+  const plainFfmpeg = "/Organization/Media Tools/plain/ffmpeg";
+  const runtime = createRuntime({
+    async exec(call) {
+      if (call.executable === plainFfmpeg && call.args[0] === "-version") {
+        return {
+          status: 0,
+          stdout: "ffmpeg version 8.1 test\nconfiguration: --enable-libx264 --enable-libx265\n",
+          stderr: "",
+        };
+      }
+      return undefined;
+    },
+  });
+  t.after(() => runtime.cleanup());
+  runtime.existingFiles.add(plainFfmpeg);
+  await runtime.emit("iina.window-loaded");
+  runtime.preferences.set("ffmpegPath", "");
+  runtime.preferences.set("ffmpegFullConfirmed", false);
+
+  const result = await runtime.callRpc("$useExistingFfmpegFull", {
+    ffmpegPath: plainFfmpeg,
+  });
+  assert.equal(result.ffmpegSetupPhase, "error");
+  assert.equal(result.ffmpegAvailable, false);
+  assert.match(result.lastError, /not an FFmpeg-full build/);
+  assert.notEqual(runtime.preferences.get("ffmpegPath"), plainFfmpeg);
+  assert.notEqual(runtime.preferences.get("ffmpegFullConfirmed"), true);
 });
 
 test("preview seeks numerically, starts playback, and is cancelled by another mark action", async (t) => {
@@ -1338,7 +1704,7 @@ test("Precise falls back to 192 kbps when ffprobe is unavailable", async (t) => 
     },
   });
   t.after(() => runtime.cleanup());
-  runtime.existingFiles.delete("/opt/homebrew/bin/ffprobe");
+  runtime.existingFiles.delete("/opt/homebrew/opt/ffmpeg-full/bin/ffprobe");
   runtime.preferences.set("exportMode", "precise");
   await runtime.emit("iina.window-loaded");
   const state = runtime.evaluate("state");
@@ -1723,15 +2089,15 @@ test("reverse time validation keeps duration and In/Out constraints", () => {
   const result = JSON.parse(sidebarEvaluate(`JSON.stringify((() => {
     latestState = { durationSeconds: 100.75, inPoint: 20.25, outPoint: 80.75 };
     return {
-      duration: validatedTimecodeEditSeconds("1540", 24),
-      pastedFrames: validatedTimecodeEditSeconds("1", 24, 1.5),
+      duration: validatedTimecodeEditSeconds("1540"),
+      pastedFrames: validatedTimecodeEditSeconds("1", 1.5),
       position: manualTimecodeWholeSeconds("position", "", 100.75),
       inPoint: manualTimecodeWholeSeconds("mark", "in", 90),
       outPoint: manualTimecodeWholeSeconds("mark", "out", 10)
     };
   })())`));
   assert.deepEqual(result, { duration: 100, pastedFrames: 1, position: 100, inPoint: 80, outPoint: 21 });
-  assert.equal(sidebarEvaluate('formatFrameTimecode(validatedTimecodeEditSeconds("1540", 24), 24).endsWith("00f")'), true);
+  assert.equal(sidebarEvaluate('formatFrameTimecode(validatedTimecodeEditSeconds("1540"), 24).endsWith("00f")'), true);
 });
 
 test("fractional-FPS ranges and compact durations remain stable", () => {

@@ -88,9 +88,48 @@ test("manifest defaults, preferences controls, and reset defaults stay aligned",
   );
   assert.deepEqual(JSON.parse(JSON.stringify(resetDefaults)), manifest.preferenceDefaults);
 
-  const controlKeys = new Set(matches(preferencesHtml, /\bdata-pref-key=["']([^"']+)["']/g));
+  const controlKeys = new Set([
+    ...matches(preferencesHtml, /\bdata-pref-key=["']([^"']+)["']/g),
+    ...matches(preferencesHtml, /<input\b[^>]*\btype=["']radio["'][^>]*\bname=["']([^"']+)["']/g),
+  ]);
   for (const key of controlKeys) {
     assert.ok(Object.hasOwn(manifest.preferenceDefaults, key), `control ${key} lacks a manifest default`);
+  }
+  assert.doesNotMatch(
+    preferencesHtml,
+    /<input\b[^>]*\btype=["']radio["'][^>]*\bdata-pref-key=/,
+    "IINA radio preferences must bind through their shared name only"
+  );
+  assert.equal(
+    matches(preferencesHtml, /<input\b[^>]*\btype=["']range["'][^>]*\bdata-type=["']int["']/g).length,
+    2,
+    "numeric sensitivity preferences must use IINA integer bindings"
+  );
+  assert.match(preferencesHtml, /function syncPreferencesOrThrow\(\)[\s\S]*?window\.iina\.preferences\.sync\(\)/);
+  assert.deepEqual(manifest.permissions.slice().sort(), ["file-system", "show-osd"]);
+});
+
+test("every published setting has a runtime consumer and only intentional state is hidden", () => {
+  const manifest = JSON.parse(read("Info.json"));
+  const preferencesHtml = read("preferences.html");
+  const mainJs = read("main.js");
+  const visibleKeys = new Set([
+    ...matches(preferencesHtml, /\bdata-pref-key=["']([^"']+)["']/g),
+    ...matches(preferencesHtml, /<input\b[^>]*\btype=["']radio["'][^>]*\bname=["']([^"']+)["']/g),
+  ]);
+  const internalKeys = new Set([
+    "ffmpegFullConfirmed",
+    "homebrewPath",
+    "clipSortMode",
+    "clipSortDirection",
+  ]);
+
+  assert.deepEqual(
+    Object.keys(manifest.preferenceDefaults).filter((key) => !visibleKeys.has(key)).sort(),
+    Array.from(internalKeys).sort()
+  );
+  for (const key of visibleKeys) {
+    assert.match(mainJs, new RegExp(`["']${key}["']`), `setting ${key} has no main-entry consumer`);
   }
 });
 
@@ -106,6 +145,17 @@ test("general plugin behavior settings share one description-free group", () => 
   assert.doesNotMatch(preferencesHtml, /Places newly created clips/);
   assert.doesNotMatch(preferencesHtml, />Clips<\/h2>/);
   assert.doesNotMatch(preferencesHtml, />Export behavior<\/h2>/);
+});
+
+test("Ask where to save disables and visibly dims the persistent output folder", () => {
+  const preferencesHtml = read("preferences.html");
+  assert.match(preferencesHtml, /id="ask-where-to-save"[^>]*data-pref-key="askWhereToSave"/);
+  assert.match(preferencesHtml, /id="output-folder-setting" class="pref-field output-folder-setting"/);
+  assert.match(preferencesHtml, /\.settings-section-body:has\(#ask-where-to-save:checked\) \.output-folder-setting\s*\{[\s\S]*?opacity: 0\.44;[\s\S]*?pointer-events: none;/);
+  assert.match(preferencesHtml, /\.output-folder-setting input:disabled,[\s\S]*?-webkit-appearance: none;[\s\S]*?border-radius: 6px;[\s\S]*?-webkit-text-fill-color: rgba\(255, 255, 255, 0\.5\);/);
+  assert.match(preferencesHtml, /outputFolderInput\.disabled = enabled;/);
+  assert.match(preferencesHtml, /askWhereToSaveCheckbox\.addEventListener\("input", \(\) => updateAskWhereToSaveState\(true\)\)/);
+  assert.match(preferencesHtml, /askWhereToSaveCheckbox\.addEventListener\("change", \(\) => updateAskWhereToSaveState\(true\)\)/);
 });
 
 test("sidebar calls exactly the RPC methods registered by the main entry", () => {
@@ -127,6 +177,61 @@ test("export buttons expose a custom Show Containing Folder context menu", () =>
   assert.match(sidebarJs, /trigger\.addEventListener\("contextmenu"[\s\S]*?event\.preventDefault\(\)/);
   assert.match(sidebarJs, /rpc\.\$showExportFolder\(\)/);
   assert.match(read("main.js"), /utils\.exec\("\/usr\/bin\/open", \[folder\], folder\)/);
+});
+
+test("FFmpeg-full setup blocks the sidebar and preserves explicit installation paths", () => {
+  const sidebarHtml = read("sidebar.html");
+  const sidebarJs = read("sidebar.js");
+  const mainJs = read("main.js");
+  assert.match(sidebarHtml, /id="ffmpegSetupModal"[\s\S]*?role="dialog"[\s\S]*?aria-modal="true"/);
+  assert.match(sidebarHtml, /id="installFfmpegButton"[^>]*>Install FFmpeg-full<\/button>/);
+  assert.match(sidebarHtml, /class="ffmpeg-setup-symbol"[\s\S]*?<img src="assets\/film\.svg" alt="">/);
+  assert.match(sidebarHtml, /\.ffmpeg-setup-symbol\s*\{[\s\S]*?width: 64px;[\s\S]*?height: 60px;/);
+  assert.match(sidebarHtml, /\.ffmpeg-setup-symbol img\s*\{[\s\S]*?filter: invert\(1\);/);
+  assert.match(sidebarHtml, /id="toggleCustomFfmpegButton"[^>]*>FFmpeg-full Setup Options…<\/button>/);
+  assert.match(sidebarHtml, /id="ffmpegInstallationDirectory"/);
+  assert.match(sidebarHtml, /id="browseFfmpegInstallationDirectory"[^>]*aria-label="Browse installation directory"/);
+  assert.match(sidebarHtml, /id="browseExistingFfmpegFull"[^>]*aria-label="Browse existing FFmpeg-full executable"/);
+  assert.match(sidebarHtml, /src="assets\/folder\.svg"/);
+  assert.match(sidebarHtml, /for="ffmpegInstallationDirectory">FFmpeg-full installation directory<\/label>/);
+  assert.match(sidebarHtml, /Choose a folder, then click Install FFmpeg-full\.<br>Leave blank to use the default location\./);
+  assert.match(sidebarHtml, /id="existingFfmpegFullPath"/);
+  assert.match(sidebarHtml, /Quit and reopen IINA/);
+  assert.match(sidebarJs, /rpc\.\$installFfmpegFull\(\{ installationDirectory \}\)/);
+  assert.match(sidebarJs, /rpc\.\$browseFfmpegInstallationDirectory\(\)/);
+  assert.match(sidebarJs, /rpc\.\$browseExistingFfmpegFull\(\)/);
+  assert.match(sidebarJs, /rpc\.\$useExistingFfmpegFull\(\{ ffmpegPath \}\)/);
+  assert.match(mainJs, /utils\.exec\(homebrew\.path, \["install", "ffmpeg-full"\]/);
+  assert.match(mainJs, /validateInstallationDirectory\(requestedInstallationDirectory\)/);
+  assert.match(mainJs, /utils\.exec\(\s*"\/usr\/bin\/git",\s*\["clone", "--depth=1", HOMEBREW_REPOSITORY_URL, normalizedDirectory\]/);
+  assert.match(mainJs, /ffmpegSetupPhase = "restart-required"/);
+  assert.match(mainJs, /"\/opt\/homebrew\/opt\/ffmpeg-full\/bin\/ffmpeg"/);
+  assert.match(mainJs, /"\/usr\/local\/opt\/ffmpeg-full\/bin\/ffmpeg"/);
+  assert.match(mainJs, /FFMPEG_FULL_REQUIRED_CONFIGURATION_FLAGS/);
+  assert.match(mainJs, /reason: "not an FFmpeg-full build"/);
+  assert.match(sidebarJs, /missing: "FFmpeg Required"/);
+  assert.match(sidebarJs, /Install FFmpeg-full for the best experience\./);
+});
+
+test("sidebar delegates blur to IINA and clips content beneath its transparent sticky toolbar", () => {
+  const sidebarHtml = read("sidebar.html");
+  const sidebarJs = read("sidebar.js");
+  assert.match(sidebarHtml, /--clipmaker-segment-background: transparent;/);
+  assert.match(sidebarHtml, /--clipmaker-sidebar-surface: transparent;/);
+  assert.match(sidebarHtml, /body\s*\{[\s\S]*?background: none;/);
+  assert.doesNotMatch(sidebarHtml, /body::before|backdrop-filter/);
+  assert.match(sidebarHtml, /\.clipmaker-segment\s*\{[\s\S]*?background: var\(--clipmaker-segment-background\);/);
+  assert.doesNotMatch(sidebarHtml, /--clipmaker-toolbar-(?:stuck-)?surface/);
+  assert.match(sidebarHtml, /\.clips-header\s*\{[\s\S]*?background: transparent;[\s\S]*?background-color: transparent;/);
+  assert.match(sidebarHtml, /\.clips-content-segment,\s*\.export-segment\s*\{\s*clip-path: inset\(var\(--clipmaker-sticky-overlap, 0px\) 0 0 0\);/);
+  assert.match(sidebarHtml, /id="clipsHeader"/);
+  assert.match(sidebarHtml, /id="clipsContentSegment"/);
+  assert.match(sidebarHtml, /id="exportSegment"/);
+  assert.match(sidebarJs, /function stickyOverlapForRects\(/);
+  assert.doesNotMatch(sidebarJs, /classList\.toggle\("is-stuck"/);
+  assert.match(sidebarJs, /surface\.style\.setProperty\("--clipmaker-sticky-overlap"/);
+  assert.match(sidebarJs, /document\.addEventListener\("scroll", scheduleStickySurfaceOcclusion, true\)/);
+  assert.doesNotMatch(sidebarHtml, /--clipmaker-material-filter/);
 });
 
 test("release sources contain no stale package references or private user paths", () => {
@@ -176,6 +281,7 @@ test("clip sorting controls expose the required menu, direction icons, and acces
   const sidebarHtml = read("sidebar.html");
   assert.match(sidebarHtml, /id="clipSortButton"[^>]*aria-label="Sort clips"[^>]*aria-haspopup="menu"/);
   assert.match(sidebarHtml, /id="clipSortMenu"[^>]*role="menu"/);
+  assert.match(sidebarHtml, /\.clip-sort-menu\s*\{[\s\S]*?background: rgba\(12, 12, 16, 0\.92\);/);
   const labels = matches(sidebarHtml, /class="clip-sort-menu-item"[\s\S]*?<span>([^<]+)<\/span><\/button>/g);
   assert.deepEqual(labels, [
     "Custom",
@@ -240,6 +346,7 @@ test("Deselect morphs as one accessible control with the lightweight cursor-clic
   assert.match(button[0], /class="selection-clear-label">Deselect<\/span>/);
   assert.match(button[0], /class="selection-clear-icon"/);
   assert.doesNotMatch(button[0], /\btitle=/);
+  assert.doesNotMatch(sidebarHtml, /selection-clear-tooltip/);
 
   assert.match(sidebarHtml, /\.selection-actions\.is-search-expanded/);
   assert.match(sidebarHtml, /--deselect-content-travel: 28px/);
@@ -251,6 +358,9 @@ test("Deselect morphs as one accessible control with the lightweight cursor-clic
   assert.match(button[0], /data-approved-asset="assets\/cursorarrow-click\.svg"[\s\S]*?<svg viewBox="0 0 24 24"/);
   assert.match(button[0], /stroke-width="1\.7"/);
   assert.match(sidebarHtml, /\.selection-clear-icon\s*\{[\s\S]*?width: 14px;[\s\S]*?height: 14px;/);
+  assert.match(sidebarHtml, /\.selection-clear-label\s*\{[\s\S]*?top: -1px;[\s\S]*?width: 100%;[\s\S]*?height: 100%;[\s\S]*?transform: translateY\(0\);/);
+  assert.doesNotMatch(sidebarHtml, /\.selection-clear-label,\s*\.selection-clear-icon\s*\{[^}]*will-change: transform;/);
+  assert.doesNotMatch(sidebarHtml, /\.selection-clear-label\s*\{[^}]*translate\(-50%/);
   assert.doesNotMatch(sidebarHtml, /(?:-webkit-)?mask:\s*url\("assets\/(?:cursorarrow-click|sort-(?:ascending|descending))\.svg"/);
   assert.match(sidebarHtml, /\.selection-clear-pill\s*\{[\s\S]*?width: 69px;[\s\S]*?min-width: 69px;[\s\S]*?flex: 0 0 auto;/);
   assert.match(sidebarHtml, /\.selection-actions\.is-search-expanded \.selection-clear-pill\s*\{\s*width: 24px;\s*min-width: 24px;/);
@@ -291,7 +401,8 @@ test("delete confirmations stay anchored, dismiss after threshold scroll, and ex
   const sidebarHtml = read("sidebar.html");
   const sidebarJs = read("sidebar.js");
   assert.match(sidebarHtml, /@media \(max-width: 350px\)[\s\S]*?\.clips-selection-label-slot\s*\{\s*display: none/);
-  assert.match(sidebarJs, /const SELECTION_ACTIONS_SEARCH_RESERVED_WIDTH_PX = 104/);
+  assert.match(sidebarJs, /const SELECTION_ACTIONS_SEARCH_RESERVED_WIDTH_PX = 59/);
+  assert.match(sidebarJs, /const SEARCH_WITH_SELECTION_EDGE_RESERVE_PX = 36/);
   assert.match(sidebarHtml, /id="clearListConfirm"[\s\S]*?Delete all clips/);
   assert.match(sidebarHtml, /@keyframes shift-delete-power-pulse[\s\S]*?scale\(1\.16\)/);
   assert.match(sidebarJs, /const DELETE_CONFIRM_SCROLL_DISMISS_RATIO = 1 \/ 3/);
@@ -326,7 +437,7 @@ test("source title uses quick-click copy without breaking native text selection"
   assert.match(sidebarJs, /window\.addEventListener\("pointerup", handleTitleCopyPointerEnd\)/);
   assert.match(sidebarHtml, /\.video-title-viewport\s*\{[\s\S]*?user-select: text;[\s\S]*?-webkit-user-select: text;/);
   assert.match(sidebarHtml, /\.video-title-bubble-text\s*\{[\s\S]*?user-select: text;[\s\S]*?-webkit-user-select: text;/);
-  assert.match(sidebarHtml, /\.title-copy-toast\s*\{[\s\S]*?top: calc\(100% \+ 7px\);[\s\S]*?background: rgba\(5, 5, 7, 0\.97\);/);
+  assert.match(sidebarHtml, /\.title-copy-toast\s*\{[\s\S]*?top: calc\(100% \+ 7px\);[\s\S]*?background: var\(--clipmaker-flyout-surface\);/);
   assert.match(sidebarHtml, /@keyframes title-copy-toast-emerge/);
   assert.doesNotMatch(sidebarHtml, /title-copy-toast-ripple|\.title-copy-toast::before/);
 });

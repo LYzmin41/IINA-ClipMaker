@@ -1,5 +1,5 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <title>ClipMaker Preferences</title>
@@ -147,14 +147,30 @@
         filter 160ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
-    .output-folder-setting.is-disabled-by-ask-save {
-      opacity: 0.48;
-      filter: saturate(0.72);
+    .output-folder-setting.is-disabled-by-ask-save,
+    .settings-section-body:has(#ask-where-to-save:checked) .output-folder-setting {
+      opacity: 0.44;
+      filter: saturate(0.6);
+      pointer-events: none;
     }
 
     .output-folder-setting.is-disabled-by-ask-save,
-    .output-folder-setting.is-disabled-by-ask-save * {
+    .output-folder-setting.is-disabled-by-ask-save *,
+    .settings-section-body:has(#ask-where-to-save:checked) .output-folder-setting,
+    .settings-section-body:has(#ask-where-to-save:checked) .output-folder-setting * {
       cursor: default !important;
+    }
+
+    .output-folder-setting input:disabled,
+    .settings-section-body:has(#ask-where-to-save:checked) .output-folder-setting input {
+      appearance: none;
+      -webkit-appearance: none;
+      border-color: rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.14);
+      color: rgba(255, 255, 255, 0.5);
+      -webkit-text-fill-color: rgba(255, 255, 255, 0.5);
+      opacity: 1;
     }
 
     .timecode-gestures .settings-section-body {
@@ -512,6 +528,8 @@
     }
 
     .help-icon {
+      appearance: none;
+      -webkit-appearance: none;
       box-sizing: border-box;
       display: inline-flex;
       align-items: center;
@@ -523,7 +541,9 @@
       padding: 0;
       border: 0.5px solid rgba(255, 255, 255, 0.22);
       border-radius: 50%;
+      background: transparent;
       color: rgba(255, 255, 255, 0.48);
+      font-family: inherit;
       font-size: 10px;
       font-weight: 600;
       line-height: 1;
@@ -1033,22 +1053,22 @@
       <div class="settings-group">
         <h3 class="settings-group-title">Container</h3>
         <div class="choice-list">
-          <label><input type="radio" name="container" data-pref-key="container" value="source"> Same as source</label>
-          <label><input type="radio" name="container" data-pref-key="container" value="mp4"> MP4</label>
-          <label><input type="radio" name="container" data-pref-key="container" value="mov"> MOV</label>
-          <label><input type="radio" name="container" data-pref-key="container" value="mkv"> MKV</label>
+          <label><input type="radio" name="container" value="source"> Same as source</label>
+          <label><input type="radio" name="container" value="mp4"> MP4</label>
+          <label><input type="radio" name="container" value="mov"> MOV</label>
+          <label><input type="radio" name="container" value="mkv"> MKV</label>
         </div>
       </div>
 
       <div class="settings-group export-mode">
         <div class="section-heading-with-help">
           <h3 class="settings-group-title">Export mode</h3>
-          <span class="help-icon" tabindex="0" role="button" aria-label="Fast exports without re-encoding when possible. Faster, but cut points may follow keyframes. Precise re-encodes for accurate In and Out points and adapts AAC quality to the source audio when available. Slower, but more exact.">?</span>
+          <button class="help-icon" type="button" aria-label="Fast exports without re-encoding when possible. Faster, but cut points may follow keyframes. Precise re-encodes for accurate In and Out points and adapts AAC quality to the source audio when available. Slower, but more exact.">?</button>
           <div class="help-tooltip"><strong>Fast:</strong> exports without re-encoding when possible. Faster, but cut points may follow keyframes.<br><strong>Precise:</strong> re-encodes for accurate In and Out points and adapts AAC quality to the source audio when available. Slower, but more exact.</div>
         </div>
         <div class="segmented-control" role="radiogroup" aria-label="Export mode">
-          <label><input type="radio" name="exportMode" data-pref-key="exportMode" value="fast"> Fast</label>
-          <label><input type="radio" name="exportMode" data-pref-key="exportMode" value="precise"> Precise</label>
+          <label><input type="radio" name="exportMode" value="fast"> Fast</label>
+          <label><input type="radio" name="exportMode" value="precise"> Precise</label>
         </div>
       </div>
     </div>
@@ -1071,7 +1091,7 @@
           <div class="sensitivity-scale">
             <span class="sensitivity-scale-icon" aria-hidden="true"><img src="assets/tortoise.svg" alt=""></span>
             <div class="sensitivity-range" data-slider="scroll-sensitivity">
-              <input id="timecode-scroll-sensitivity" class="sensitivity-slider sensitivity-range-input" type="range" data-pref-key="timecodeScrollSensitivity" min="1" max="5" step="1" value="3" aria-label="Timecode scroll sensitivity">
+              <input id="timecode-scroll-sensitivity" class="sensitivity-slider sensitivity-range-input" type="range" data-type="int" data-pref-key="timecodeScrollSensitivity" min="1" max="5" step="1" value="3">
               <span class="sensitivity-ticks" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
             </div>
             <span class="sensitivity-scale-icon is-fast" aria-hidden="true"><img src="assets/hare.svg" alt=""></span>
@@ -1093,7 +1113,7 @@
           <div class="sensitivity-scale">
             <span class="sensitivity-scale-icon" aria-hidden="true"><img src="assets/tortoise.svg" alt=""></span>
             <div class="sensitivity-range" data-slider="drag-sensitivity">
-              <input id="timecode-drag-sensitivity" class="sensitivity-slider sensitivity-range-input" type="range" data-pref-key="timecodeDragSensitivity" min="1" max="5" step="1" value="3" aria-label="Timecode drag sensitivity">
+              <input id="timecode-drag-sensitivity" class="sensitivity-slider sensitivity-range-input" type="range" data-type="int" data-pref-key="timecodeDragSensitivity" min="1" max="5" step="1" value="3">
               <span class="sensitivity-ticks" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
             </div>
             <span class="sensitivity-scale-icon is-fast" aria-hidden="true"><img src="assets/hare.svg" alt=""></span>
@@ -1144,7 +1164,7 @@
       <label><input type="checkbox" data-type="bool" data-pref-key="deleteWithoutConfirmation"> Delete without confirmation</label>
       <div class="checkbox-with-help">
         <label><input type="checkbox" data-type="bool" data-pref-key="showSidebarOnInvalidExport"> Show sidebar on error</label>
-        <span class="help-icon" tabindex="0" role="button" aria-label="Opens ClipMaker automatically if you try to export without a valid clip.">?</span>
+        <button class="help-icon" type="button" aria-label="Opens ClipMaker automatically if you try to export without a valid clip.">?</button>
         <div class="help-tooltip">Opens ClipMaker automatically if you try to export without a valid clip.</div>
       </div>
     </div>
@@ -1169,21 +1189,21 @@
     <div class="settings-section-body">
       <div class="pref-field">
         <div class="label-with-help">
-          <label class="settings-field-title" for="ffmpeg-path">FFmpeg path</label>
-          <span class="help-icon" tabindex="0" role="button" aria-label="FFmpeg installation help">?</span>
+          <label class="settings-field-title" for="ffmpeg-path">FFmpeg-full path</label>
+          <button class="help-icon" type="button" aria-label="FFmpeg installation help">?</button>
           <div class="help-tooltip ffmpeg-help-tooltip">
             <div class="ffmpeg-help-text">
-              <p>FFmpeg is required to export clips.</p>
+              <p>FFmpeg-full is recommended for the most reliable ClipMaker experience.</p>
               <p>1. Install Homebrew:</p>
               <button class="ffmpeg-install-command" type="button" aria-label="Copy Homebrew install command" data-copy-command='/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'>/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</button>
-              <p>2. Install FFmpeg:</p>
-              <button class="ffmpeg-install-command" type="button" aria-label="Copy FFmpeg install command" data-copy-command="brew install ffmpeg">brew install ffmpeg</button>
+              <p>2. Install FFmpeg-full:</p>
+              <button class="ffmpeg-install-command" type="button" aria-label="Copy FFmpeg-full install command" data-copy-command="brew install ffmpeg-full">brew install ffmpeg-full</button>
               <div class="ffmpeg-copy-confirmation" aria-live="polite"></div>
               <p>3. Restart IINA.</p>
             </div>
           </div>
         </div>
-        <input id="ffmpeg-path" type="text" data-pref-key="ffmpegPath" placeholder="FFmpeg not found" autocomplete="off" spellcheck="false">
+        <input id="ffmpeg-path" type="text" data-pref-key="ffmpegPath" placeholder="FFmpeg-full not found" autocomplete="off" spellcheck="false">
         <div id="ffmpeg-path-warning" class="field-warning" aria-live="polite"></div>
       </div>
     </div>
@@ -1252,7 +1272,7 @@
   <section class="pref-section settings-section shortcuts">
     <div class="section-heading-with-help shortcut-heading">
       <h2 class="settings-section-title">Shortcuts</h2>
-      <span class="help-icon" tabindex="0" role="button" aria-label="Click a field and press a key combination. Leave empty to disable.">?</span>
+      <button class="help-icon" type="button" aria-label="Click a field and press a key combination. Leave empty to disable.">?</button>
       <div class="help-tooltip">Click a field and press a key combination.<br>Leave empty to disable.</div>
     </div>
 
@@ -1354,6 +1374,8 @@
       outputFolder: DEFAULT_OUTPUT_FOLDER,
       askWhereToSave: false,
       ffmpegPath: "",
+      ffmpegFullConfirmed: false,
+      homebrewPath: "",
       container: "source",
       exportMode: "fast",
       invertTimecodeScrolling: false,
@@ -1606,6 +1628,12 @@
       }
     }
 
+    function syncPreferencesOrThrow() {
+      if (window.iina && window.iina.preferences && typeof window.iina.preferences.sync === "function") {
+        window.iina.preferences.sync();
+      }
+    }
+
     function resetPreferencesAtomically() {
       const keys = Object.keys(DEFAULT_SETTINGS);
       const previousValues = {};
@@ -1620,6 +1648,7 @@
           attemptedKeys.push(key);
           preferenceSetOrThrow(key, DEFAULT_SETTINGS[key]);
         });
+        syncPreferencesOrThrow();
       } catch (error) {
         let rollbackFailed = false;
         attemptedKeys.reverse().forEach((key) => {
@@ -1629,6 +1658,11 @@
             rollbackFailed = true;
           }
         });
+        try {
+          syncPreferencesOrThrow();
+        } catch (syncError) {
+          rollbackFailed = true;
+        }
         if (rollbackFailed) {
           throw new Error("Settings reset failed and some values could not be restored");
         }
@@ -1651,6 +1685,15 @@
         } else {
           control.value = String(value == null ? "" : value);
         }
+      });
+
+      const container = normalizeContainerPreferenceValue(preferenceGet("container", DEFAULT_SETTINGS.container));
+      containerInputs.forEach((input) => {
+        input.checked = input.value === container;
+      });
+      const mode = normalizeExportModePreference(preferenceGet("exportMode", DEFAULT_SETTINGS.exportMode));
+      exportModeInputs.forEach((input) => {
+        input.checked = input.value === mode;
       });
 
       shortcutInputs.forEach((input) => {
@@ -1879,7 +1922,7 @@
       const normalized = normalizeFfmpegPathValue(preferenceGet("ffmpegPath", ""));
       ffmpegPathCommittedValue = normalized;
       ffmpegPathInput.value = normalized;
-      ffmpegPathInput.placeholder = "FFmpeg not found";
+      ffmpegPathInput.placeholder = "FFmpeg-full not found";
       setFfmpegPathWarning("");
       if (normalized !== preferenceGet("ffmpegPath", "")) {
         preferenceSet("ffmpegPath", normalized);
@@ -1889,11 +1932,13 @@
     function commitFfmpegPathField() {
       if (!ffmpegPathInput) return;
       const normalized = normalizeFfmpegPathValue(ffmpegPathInput.value);
+      const changed = normalized !== ffmpegPathCommittedValue;
       ffmpegPathInput.value = normalized;
       ffmpegPathCommittedValue = normalized;
       preferenceSet("ffmpegPath", normalized);
+      if (changed) preferenceSet("ffmpegFullConfirmed", false);
       if (!isAbsoluteFfmpegPathCandidate(normalized)) {
-        setFfmpegPathWarning("Invalid FFmpeg executable");
+        setFfmpegPathWarning("Invalid FFmpeg-full executable");
       } else {
         setFfmpegPathWarning("");
       }
@@ -2215,6 +2260,7 @@
     // IINA's preferences webview does not expose the main-entry
     // input.getAllKeyBindings API, so only ClipMaker shortcuts can be compared.
     if (askWhereToSaveCheckbox) {
+      askWhereToSaveCheckbox.addEventListener("input", () => updateAskWhereToSaveState(true));
       askWhereToSaveCheckbox.addEventListener("change", () => updateAskWhereToSaveState(true));
     }
     updateAskWhereToSaveState(false);

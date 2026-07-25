@@ -34,7 +34,6 @@ const NAVIGATION_HISTORY_DUPLICATE_TOLERANCE_SECONDS = 0.25;
 const CLIP_SINGLE_CLICK_DELAY_MS = 280;
 const TITLE_BUBBLE_SHOW_DELAY_MS = 200;
 const TITLE_BUBBLE_HIDE_DELAY_MS = 200;
-const TITLE_BUBBLE_FADE_MS = 140;
 const TITLE_COPY_TOAST_VISIBLE_MS = 1000;
 const TITLE_COPY_QUICK_CLICK_MAX_MS = 220;
 const TITLE_COPY_SINGLE_CLICK_DELAY_MS = 320;
@@ -58,11 +57,12 @@ const SEARCH_PREFERRED_EXPANDED_WIDTH_PX = 240;
 const SEARCH_SOLO_EXPANDED_WIDTH_RATIO = 0.72;
 const TOOLBAR_EXPANSION_MS = 170;
 const TOOLBAR_SAFETY_GAP_PX = 10;
+const SEARCH_WITH_SELECTION_EDGE_RESERVE_PX = 36;
 const SELECTION_ACTIONS_ENTRY_MS = 420;
 const SELECTION_ACTIONS_EXIT_MS = 280;
 const SELECTION_SUMMARY_ENTRY_MS = 420;
 const SELECTION_SUMMARY_EXIT_MS = 280;
-const SELECTION_ACTIONS_SEARCH_RESERVED_WIDTH_PX = 104;
+const SELECTION_ACTIONS_SEARCH_RESERVED_WIDTH_PX = 59;
 const CLIP_SORT_ICON_ANIMATION_MS = 170;
 const DELETE_CONFIRM_GAP_PX = 16;
 const DELETE_CONFIRM_VIEWPORT_MARGIN_PX = 8;
@@ -71,6 +71,7 @@ const CLEAR_LIST_CONFIRM_SCROLL_DISMISS_RATIO = 0.2;
 const CLEAR_LIST_CONFIRM_MIN_SCROLL_PX = 24;
 const CLEAR_LIST_TRIGGER_VISIBLE_DISMISS_RATIO = 0.4;
 const DELETE_CONFIRM_HIDE_DELAY_MS = 300;
+const STICKY_CLIPPED_SURFACE_IDS = Object.freeze(["clipsContentSegment", "exportSegment"]);
 const CLIP_SORT_MODES = ["custom", "creation", "name", "duration", "in", "out"];
 const CLIP_SORT_DIRECTIONS = ["ascending", "descending"];
 const CLIP_SORT_DEFAULT_DIRECTIONS = Object.freeze({
@@ -83,6 +84,7 @@ const CLIP_SORT_DEFAULT_DIRECTIONS = Object.freeze({
 });
 let rpc = null;
 let latestState = null;
+let ffmpegSetupWasOpen = true;
 let titleMeasureTimer = null;
 let titleBubbleShowTimer = null;
 let titleBubbleHideTimer = null;
@@ -159,6 +161,7 @@ let selectedLabelHidden = false;
 let selectionSummaryAnimationTimer = null;
 let renderedSelectedCount = 0;
 let selectionActionsAnimationTimer = null;
+let stickyOcclusionFrame = null;
 let activeTimecodeEdit = null;
 let activeTimecodeTransition = null;
 let markEditUndo = null;
@@ -172,6 +175,36 @@ function $(id) {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function stickyOverlapForRects(headerRect, surfaceRect) {
+  const headerBottom = Number(headerRect && headerRect.bottom);
+  const surfaceTop = Number(surfaceRect && surfaceRect.top);
+  const surfaceHeight = Math.max(0, Number(surfaceRect && surfaceRect.height) || 0);
+  if (!Number.isFinite(headerBottom) || !Number.isFinite(surfaceTop)) return 0;
+  return clamp(headerBottom - surfaceTop, 0, surfaceHeight);
+}
+
+function updateStickySurfaceOcclusion() {
+  stickyOcclusionFrame = null;
+  const header = $("clipsHeader");
+  if (!header) return;
+  const headerRect = header.getBoundingClientRect();
+  STICKY_CLIPPED_SURFACE_IDS.forEach((id) => {
+    const surface = $(id);
+    if (!surface) return;
+    const overlap = stickyOverlapForRects(headerRect, surface.getBoundingClientRect());
+    if (overlap > 0) {
+      surface.style.setProperty("--clipmaker-sticky-overlap", `${overlap.toFixed(2)}px`);
+    } else {
+      surface.style.removeProperty("--clipmaker-sticky-overlap");
+    }
+  });
+}
+
+function scheduleStickySurfaceOcclusion() {
+  if (stickyOcclusionFrame !== null) return;
+  stickyOcclusionFrame = window.requestAnimationFrame(updateStickySurfaceOcclusion);
 }
 
 function eventPoint(event) {
@@ -825,8 +858,10 @@ function calculateClipSearchTargetWidth(compactSelectedLabel) {
     : 0;
   const selectionVisible = selection && !selection.classList.contains("is-hidden");
   const selectionWidth = selectionVisible ? SELECTION_ACTIONS_SEARCH_RESERVED_WIDTH_PX : 0;
-  const toolbarGap = selectionWidth > 0 ? 6 : 0;
-  const available = Math.floor(toolbarWidth + labelWidthReleased - selectionWidth - toolbarGap - TOOLBAR_SAFETY_GAP_PX);
+  const edgeReserve = selectionWidth > 0
+    ? SEARCH_WITH_SELECTION_EDGE_RESERVE_PX
+    : TOOLBAR_SAFETY_GAP_PX;
+  const available = Math.floor(toolbarWidth + labelWidthReleased - selectionWidth - edgeReserve);
   if (available < SEARCH_MIN_EXPANDED_WIDTH_PX) {
     return Math.max(SEARCH_COLLAPSED_WIDTH_PX, available);
   }
@@ -1207,40 +1242,127 @@ function fpsIndicatorText(state) {
   return "-- fps";
 }
 
-function ffmpegHeaderStatus(state) {
-  const available = Boolean(state && (state.ffmpegAvailable || state.ffmpegFound));
-  if (available) return null;
-  const status = String(state && state.ffmpegStatus || "").toLowerCase();
-  if (status.includes("error") || status.includes("failed")) {
-    return { label: "error", className: "is-error", title: "FFmpeg error. Click to set path." };
+function ffmpegSetupPhase(state) {
+  if (state && state.ffmpegSetupPhase) return String(state.ffmpegSetupPhase);
+  if (state && (state.ffmpegAvailable || state.ffmpegFound)) return "ready";
+  return state && state.ffmpegCheckComplete ? "missing" : "checking";
+}
+
+function ffmpegSetupIsBlocking() {
+  const modal = $("ffmpegSetupModal");
+  return Boolean(modal && !modal.hidden);
+}
+
+function renderFfmpegSetup(state) {
+  const modal = $("ffmpegSetupModal");
+  if (!modal) return;
+  const phase = ffmpegSetupPhase(state);
+  const shouldShow = phase !== "ready";
+  modal.hidden = !shouldShow;
+  modal.dataset.phase = phase;
+  modal.setAttribute("aria-busy", phase === "checking" || phase === "installing" ? "true" : "false");
+  document.body.classList.toggle("ffmpeg-setup-blocked", shouldShow);
+
+  if (!shouldShow) {
+    const closedCustomPanel = $("ffmpegCustomPanel");
+    const closedCustomToggle = $("toggleCustomFfmpegButton");
+    if (closedCustomPanel) closedCustomPanel.hidden = true;
+    if (closedCustomToggle) {
+      closedCustomToggle.setAttribute("aria-expanded", "false");
+      closedCustomToggle.textContent = "FFmpeg-full Setup Options…";
+    }
+    ffmpegSetupWasOpen = false;
+    return;
   }
-  return { label: "error", className: "is-error", title: "FFmpeg not found. Click to set path." };
+
+  const title = $("ffmpegSetupTitle");
+  const message = $("ffmpegSetupMessage");
+  const progress = $("ffmpegSetupProgress");
+  const progressText = $("ffmpegSetupProgressText");
+  const actions = $("ffmpegSetupActions");
+  const installButton = $("installFfmpegButton");
+  const checkButton = $("checkFfmpegButton");
+  const customToggle = $("toggleCustomFfmpegButton");
+  const customPanel = $("ffmpegCustomPanel");
+  const error = $("ffmpegSetupError");
+  const restart = $("ffmpegRestartNote");
+  const installationDirectoryInput = $("ffmpegInstallationDirectory");
+  const ffmpegInput = $("existingFfmpegFullPath");
+
+  const titles = {
+    checking: "Checking FFmpeg-full",
+    missing: "FFmpeg Required",
+    error: "FFmpeg Required",
+    installing: "Installing FFmpeg-full",
+    "installing-terminal": "Finish Installation",
+    "restart-required": "Installation Complete"
+  };
+  const progressLabels = {
+    checking: "Checking installation",
+    installing: "Installing FFmpeg-full"
+  };
+  if (title) title.textContent = titles[phase] || titles.missing;
+  if (message) {
+    message.textContent = String(state && state.ffmpegSetupMessage || "Install FFmpeg-full for the best experience.");
+  }
+
+  const isProgress = phase === "checking" || phase === "installing";
+  if (progress) progress.hidden = !isProgress;
+  if (progressText) progressText.textContent = progressLabels[phase] || "";
+
+  const isActionable = phase === "missing" || phase === "error" || phase === "installing-terminal";
+  if (actions) actions.hidden = !isActionable;
+  if (installButton) installButton.hidden = phase === "installing-terminal";
+  if (checkButton) checkButton.hidden = phase !== "installing-terminal";
+  if (customToggle) customToggle.hidden = phase === "restart-required";
+
+  if (error) {
+    const errorMessage = phase === "error"
+      ? String(state && (state.lastError || state.ffmpegSetupMessage) || "Installation failed.")
+      : "";
+    error.textContent = errorMessage;
+    error.hidden = !errorMessage;
+    if (ffmpegInput) {
+      const invalidFfmpeg = /^Invalid FFmpeg-full executable:/i.test(errorMessage);
+      ffmpegInput.setAttribute("aria-invalid", invalidFfmpeg ? "true" : "false");
+    }
+    if (installationDirectoryInput) {
+      const invalidDirectory = /^Invalid installation directory:/i.test(errorMessage);
+      installationDirectoryInput.setAttribute("aria-invalid", invalidDirectory ? "true" : "false");
+    }
+  }
+  if (restart) restart.hidden = phase !== "restart-required";
+
+  if (installationDirectoryInput &&
+      document.activeElement !== installationDirectoryInput &&
+      !installationDirectoryInput.value) {
+    installationDirectoryInput.value = String(state && state.installationDirectory || "");
+  }
+
+  if (phase === "restart-required" || phase === "installing" || phase === "checking") {
+    if (customPanel) customPanel.hidden = true;
+    if (customToggle) {
+      customToggle.setAttribute("aria-expanded", "false");
+      customToggle.textContent = "FFmpeg-full Setup Options…";
+    }
+  }
+
+  if (!ffmpegSetupWasOpen) {
+    ffmpegSetupWasOpen = true;
+    window.requestAnimationFrame(() => {
+      const focusTarget = phase === "installing-terminal"
+        ? checkButton
+        : phase === "missing" || phase === "error"
+          ? installButton
+          : null;
+      if (focusTarget && !focusTarget.hidden) focusTarget.focus();
+    });
+  }
 }
 
 function renderTopHeaderStatus(state) {
   const fps = $("fpsIndicator");
   if (fps) fps.textContent = fpsIndicatorText(state);
-
-  const ffmpeg = $("ffmpegWarningPill");
-  if (!ffmpeg) return;
-  const status = ffmpegHeaderStatus(state);
-  if (!status) {
-    ffmpeg.hidden = true;
-    ffmpeg.disabled = true;
-    ffmpeg.removeAttribute("title");
-    ffmpeg.setAttribute("aria-hidden", "true");
-    ffmpeg.classList.remove("is-ready", "is-missing", "is-error");
-    return;
-  }
-
-  ffmpeg.hidden = false;
-  ffmpeg.textContent = status.label;
-  ffmpeg.title = status.title;
-  ffmpeg.setAttribute("aria-label", status.title);
-  ffmpeg.removeAttribute("aria-hidden");
-  ffmpeg.classList.remove("is-ready", "is-missing", "is-error");
-  ffmpeg.classList.add(status.className);
-  ffmpeg.disabled = Boolean(state && state.canUseFfmpeg === false);
 }
 
 function moveClipIdToDropIndex(ids, clipId, startIndex, dropIndex) {
@@ -2108,7 +2230,6 @@ function setVideoTitle(title) {
     }
   }
   elements.viewport.removeAttribute("title");
-  elements.viewport.setAttribute("aria-label", text);
   elements.viewport.dataset.fullTitle = text;
   scheduleTitleOverflowCheck();
 }
@@ -2993,7 +3114,7 @@ function timecodeEditWidthPx(element) {
   return rect && Number.isFinite(rect.width) ? rect.width : 0;
 }
 
-function validatedTimecodeEditSeconds(rawDigits, fps, pastedSecondsOverride = null) {
+function validatedTimecodeEditSeconds(rawDigits, pastedSecondsOverride = null) {
   const parsed = parseReverseTimeDigits(rawDigits);
   const requested = Number.isFinite(pastedSecondsOverride)
     ? Math.max(0, pastedSecondsOverride)
@@ -3435,7 +3556,7 @@ function finishTimecodeEdit(apply, options = {}) {
   if (apply && !hasValue) return false;
 
   const requested = apply
-    ? validatedTimecodeEditSeconds(edit.rawDigits, edit.fps, edit.pastedSecondsOverride)
+    ? validatedTimecodeEditSeconds(edit.rawDigits, edit.pastedSecondsOverride)
     : edit.originalValue;
   const finalValue = apply
     ? manualTimecodeWholeSeconds(edit.kind, edit.markName, requested)
@@ -4106,6 +4227,12 @@ function callPlayerHotkeyRpc(event) {
 }
 
 function handleSidebarKeydown(event) {
+  if (ffmpegSetupIsBlocking() && !isEditableKeyTarget(event.target)) {
+    if (event.key === "Tab") return;
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
   if (isEditableKeyTarget(event.target)) return;
   if (event.metaKey) return;
 
@@ -4243,6 +4370,20 @@ function callAction(action) {
     .then(renderState)
     .catch((error) => {
       console.error("[ClipMaker UI] RPC failed", error);
+    });
+}
+
+function callPathPicker(action, input) {
+  if (!rpc || typeof action !== "function" || !input) return;
+  action()
+    .then((result) => {
+      if (!result || !result.ok || !result.path) return;
+      input.value = String(result.path);
+      input.setAttribute("aria-invalid", "false");
+      input.focus();
+    })
+    .catch((error) => {
+      console.error("[ClipMaker UI] path picker failed", error);
     });
 }
 
@@ -4567,6 +4708,7 @@ function renderState(state) {
   const fps = normalizeDisplayFps(state.displayFps || state.fps || 30);
   $("title").textContent = "ClipMaker";
   renderTopHeaderStatus(state);
+  renderFfmpegSetup(state);
   setVideoTitle(state.currentFileName || "No file");
   updateSmoothPositionSync(state, fps);
   renderMarkValue("in", state.inPoint, fps);
@@ -4601,6 +4743,7 @@ function renderState(state) {
   renderClips(state.clips, fps);
   updateNavigationBackButton();
   updateMarkEditUndoButton();
+  scheduleStickySurfaceOcclusion();
 
 }
 
@@ -4703,6 +4846,79 @@ function bindExportContextMenu() {
   window.addEventListener("blur", () => closeExportContextMenu(false, true));
 }
 
+function bindFfmpegSetup() {
+  const modal = $("ffmpegSetupModal");
+  const installButton = $("installFfmpegButton");
+  const checkButton = $("checkFfmpegButton");
+  const customToggle = $("toggleCustomFfmpegButton");
+  const customPanel = $("ffmpegCustomPanel");
+  const installationDirectoryInput = $("ffmpegInstallationDirectory");
+  const browseInstallationDirectoryButton = $("browseFfmpegInstallationDirectory");
+  const ffmpegInput = $("existingFfmpegFullPath");
+  const browseExistingFfmpegButton = $("browseExistingFfmpegFull");
+  const useExistingButton = $("useExistingFfmpegButton");
+  if (!modal || !installButton || !checkButton || !customToggle || !customPanel) return;
+
+  customToggle.onclick = function () {
+    const shouldOpen = customPanel.hidden;
+    customPanel.hidden = !shouldOpen;
+    customToggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+    customToggle.textContent = shouldOpen ? "Hide Setup Options" : "FFmpeg-full Setup Options…";
+    if (shouldOpen && installationDirectoryInput) installationDirectoryInput.focus();
+  };
+
+  installButton.onclick = function () {
+    const installationDirectory = installationDirectoryInput ? installationDirectoryInput.value.trim() : "";
+    callAction(() => rpc.$installFfmpegFull({ installationDirectory }));
+  };
+
+  checkButton.onclick = function () {
+    callAction(() => rpc.$checkFfmpegFull());
+  };
+
+  if (useExistingButton) {
+    useExistingButton.onclick = function () {
+      const ffmpegPath = ffmpegInput ? ffmpegInput.value.trim() : "";
+      callAction(() => rpc.$useExistingFfmpegFull({ ffmpegPath }));
+    };
+  }
+
+  if (installationDirectoryInput) {
+    installationDirectoryInput.addEventListener("input", () => {
+      installationDirectoryInput.setAttribute("aria-invalid", "false");
+    });
+  }
+
+  if (browseInstallationDirectoryButton && installationDirectoryInput) {
+    browseInstallationDirectoryButton.onclick = function () {
+      callPathPicker(() => rpc.$browseFfmpegInstallationDirectory(), installationDirectoryInput);
+    };
+  }
+
+  if (ffmpegInput) {
+    ffmpegInput.addEventListener("input", () => {
+      ffmpegInput.setAttribute("aria-invalid", "false");
+    });
+    ffmpegInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || !useExistingButton) return;
+      event.preventDefault();
+      useExistingButton.click();
+    });
+  }
+
+  if (browseExistingFfmpegButton && ffmpegInput) {
+    browseExistingFfmpegButton.onclick = function () {
+      callPathPicker(() => rpc.$browseExistingFfmpegFull(), ffmpegInput);
+    };
+  }
+
+  modal.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" && event.key !== "Esc") return;
+    event.preventDefault();
+    event.stopPropagation();
+  });
+}
+
 function bindButtons() {
   const navigationBackButton = $("navigationBackButton");
   if (navigationBackButton) {
@@ -4746,9 +4962,6 @@ function bindButtons() {
       return;
     }
     openClearListConfirm();
-  };
-  $("ffmpegWarningPill").onclick = function () {
-    callAction(() => rpc.$setFfmpeg());
   };
   $("exportSelectedButton").onclick = function () {
     const orderedVisibleIds = displayedClipIds(latestState && latestState.clips);
@@ -4851,9 +5064,11 @@ function boot() {
   bindShiftPreviewMode();
   bindMarkInteractions();
   bindKeyboardHotkeys();
+  document.addEventListener("scroll", scheduleStickySurfaceOcclusion, true);
   window.addEventListener("resize", () => {
     scheduleTitleOverflowCheck();
     updateClipSearchExpandedWidth();
+    scheduleStickySurfaceOcclusion();
     if (activeDeleteConfirmation) positionDeleteConfirmation(activeDeleteConfirmation);
   });
   window.addEventListener("blur", resetTitleBubble);
@@ -4862,9 +5077,15 @@ function boot() {
     cancelActiveTimecodeEdit({ immediate: true });
     completeActiveTimecodeTransition();
     stopSmoothPositionTicker();
+    if (stickyOcclusionFrame !== null) {
+      window.cancelAnimationFrame(stickyOcclusionFrame);
+      stickyOcclusionFrame = null;
+    }
   });
   registerStateListener();
+  bindFfmpegSetup();
   bindButtons();
+  scheduleStickySurfaceOcclusion();
   callAction(() => rpc.$getState());
 }
 

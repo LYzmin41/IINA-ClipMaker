@@ -17,26 +17,30 @@ ClipMaker is an open-source IINA plugin for marking multiple In/Out ranges in a 
 
 Clip lists are held in memory for the current player and are cleared when the media file closes or changes.
 
-## Screenshots
-
-Screenshots are not bundled with the source release yet. Before the public announcement, add:
-
-- A sidebar overview showing a completed In/Out range and several saved clips.
-- A preferences overview showing export and timecode gesture settings.
-
 ## Requirements
 
 - macOS
 - IINA 1.4.0 or newer with JavaScript plugin support
-- FFmpeg
+- FFmpeg-full
 
-Install FFmpeg with Homebrew:
+ClipMaker checks for the official Homebrew `ffmpeg-full` formula when its sidebar opens. If it is missing, the sidebar displays a blocking setup screen with an automatic installer.
+
+The equivalent manual command is:
 
 ```sh
-brew install ffmpeg
+brew install ffmpeg-full
 ```
 
-ClipMaker checks the configured executable path, `ffmpeg` on IINA's PATH, and common Homebrew and MacPorts locations. If detection fails, set the absolute FFmpeg path in ClipMaker settings.
+If Homebrew is already installed, ClipMaker launches its executable directly with `install ffmpeg-full`. If Homebrew is not installed, ClipMaker opens the official interactive Homebrew installer in Terminal and then installs FFmpeg-full. Complete the visible Terminal prompts, return to ClipMaker, and choose **Check Installation**.
+
+After a successful installation, quit and reopen IINA so ClipMaker can load the new executable.
+
+Managed or nonstandard systems can expand **FFmpeg-full Setup Options…** and provide an installation directory. ClipMaker prepares an isolated package-manager prefix in an empty custom directory and installs FFmpeg-full there. If the directory already contains a compatible managed prefix, ClipMaker reuses it. An existing standalone FFmpeg-full executable can also be selected directly. ClipMaker detects the standard Apple Silicon and Intel keg-only paths automatically:
+
+```text
+/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg
+/usr/local/opt/ffmpeg-full/bin/ffmpeg
+```
 
 ## Installation
 
@@ -102,7 +106,7 @@ On first install, exports use the current user's Desktop by default. This can be
 
 - Output container and export mode
 - Fixed output folder or per-batch destination prompt
-- FFmpeg executable path and detection status
+- FFmpeg-full executable path and detection status
 - Reveal successful exports in Finder
 - Delete successfully exported clips from the list
 - Delete confirmation behavior
@@ -148,7 +152,7 @@ The archive is a ZIP whose root directly contains `Info.json`, as required by II
 
 ## Privacy and security
 
-ClipMaker has no telemetry, analytics, account system, or network client. Media paths and clip state remain in the local IINA plugin instance. FFmpeg is launched through IINA's process API with an executable and argument array rather than a shell command.
+ClipMaker has no telemetry, analytics, account system, or built-in network client. Media paths and clip state remain in the local IINA plugin instance. FFmpeg and an existing Homebrew executable are launched through IINA's process API with an executable and argument array rather than a shell command. If Homebrew is missing, the default setup opens Homebrew's official interactive installer visibly in Terminal. A custom installation directory uses Git to prepare an isolated Homebrew prefix in that folder; Homebrew then performs the FFmpeg-full download.
 
 ## Known limitations
 
@@ -158,6 +162,8 @@ ClipMaker has no telemetry, analytics, account system, or network client. Media 
 - Fast export may fail when a forced container is incompatible with copied source codecs.
 - Export progress is tracked per clip; FFmpeg percentage progress is not parsed.
 - An already-running FFmpeg process cannot be terminated through the current IINA process API. Late results are ignored if the media changes or IINA closes.
+- An already-running Homebrew installation cannot be cancelled through the current IINA process API. If Homebrew is not installed, its interactive Terminal prompts must be completed by the user.
+- A custom nonstandard installation prefix may need to build some dependencies locally and can therefore take longer than the default installation.
 - Global shortcut conflicts cannot be detected from the preferences webview.
 
 ## Reporting issues

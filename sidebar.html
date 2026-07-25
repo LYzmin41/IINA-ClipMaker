@@ -1,5 +1,5 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,15 +9,14 @@
       color-scheme: dark;
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
       --clipmaker-scroll-padding-top: 14px;
-      --clipmaker-material-background: rgba(42, 42, 46, 0.62);
-      --clipmaker-material-blur: 18px;
-      --clipmaker-material-saturation: 135%;
-      --clipmaker-material-filter: blur(var(--clipmaker-material-blur)) saturate(var(--clipmaker-material-saturation));
-      --clipmaker-segment-background: var(--clipmaker-material-background);
+      --clipmaker-segment-background: transparent;
       --clipmaker-glass-border: rgba(255, 255, 255, 0.07);
-      --clipmaker-sidebar-surface: var(--clipmaker-segment-background);
-      --bg: var(--clipmaker-segment-background);
-      --sidebar-background: var(--clipmaker-segment-background);
+      --clipmaker-sidebar-surface: transparent;
+      --clipmaker-raised-surface: rgba(255, 255, 255, 0.1);
+      --clipmaker-raised-surface-hover: rgba(255, 255, 255, 0.17);
+      --clipmaker-flyout-surface: rgba(12, 12, 16, 0.86);
+      --bg: var(--clipmaker-sidebar-surface);
+      --sidebar-background: var(--clipmaker-sidebar-surface);
       --timecode-suffix-fade-duration: 650ms;
       --timecode-suffix-fade-out-duration: 420ms;
       --timecode-edit-crossfade-duration: 180ms;
@@ -33,8 +32,9 @@
     }
 
     body {
+      min-height: 100vh;
       margin: 0;
-      background: transparent;
+      background: none;
     }
 
     main {
@@ -76,13 +76,6 @@
       opacity: 1;
     }
 
-    @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-      .clipmaker-segment {
-        -webkit-backdrop-filter: var(--clipmaker-material-filter);
-        backdrop-filter: var(--clipmaker-material-filter);
-      }
-    }
-
     .clipmaker-main-segment {
       padding-top: var(--clipmaker-scroll-padding-top);
     }
@@ -91,6 +84,11 @@
       padding-left: 18px;
       padding-top: 10px;
       overflow-x: visible;
+    }
+
+    .clips-content-segment,
+    .export-segment {
+      clip-path: inset(var(--clipmaker-sticky-overlap, 0px) 0 0 0);
     }
 
     .export-segment {
@@ -187,7 +185,7 @@
       padding: 7px 9px;
       border: 1px solid rgba(255, 255, 255, 0.14);
       border-radius: 8px;
-      background: rgba(12, 12, 16, 0.94);
+      background: var(--clipmaker-flyout-surface);
       color: rgba(255, 255, 255, 0.94);
       box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
       font-size: 12px;
@@ -225,56 +223,6 @@
       flex: 0 0 auto;
       min-width: 0;
       white-space: nowrap;
-    }
-
-    .ffmpeg-status-button {
-      flex: 0 0 auto;
-      min-width: 0;
-      min-height: 20px;
-      max-width: 76px;
-      padding: 2px 7px;
-      border-color: rgba(255, 255, 255, 0.12);
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.06);
-      color: rgba(244, 244, 245, 0.58);
-      cursor: pointer;
-      font-size: 11px;
-      line-height: 1.1;
-      font-weight: 700;
-      overflow: visible;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .ffmpeg-status-button[hidden] {
-      display: none !important;
-    }
-
-    .ffmpeg-status-button:disabled {
-      opacity: 1;
-      cursor: default;
-    }
-
-    .ffmpeg-status-button.is-ready {
-      color: rgba(244, 244, 245, 0.58);
-    }
-
-    .ffmpeg-status-button.is-missing,
-    .ffmpeg-status-button.is-error {
-      border-color: rgba(255, 69, 88, 0.34);
-      background: rgba(255, 69, 88, 0.1);
-      color: rgba(255, 180, 190, 0.9);
-    }
-
-    .ffmpeg-status-button:hover:not(:disabled) {
-      border-color: rgba(255, 255, 255, 0.24);
-      background: rgba(255, 255, 255, 0.12);
-    }
-
-    .ffmpeg-status-button.is-missing:hover:not(:disabled),
-    .ffmpeg-status-button.is-error:hover:not(:disabled) {
-      border-color: rgba(255, 69, 88, 0.58);
-      background: rgba(255, 69, 88, 0.18);
     }
 
     .fps-indicator {
@@ -354,7 +302,7 @@
       overflow: visible;
       border: 1px solid rgba(255, 255, 255, 0.14);
       border-radius: 10px;
-      background: rgba(12, 12, 16, 0.94);
+      background: var(--clipmaker-flyout-surface);
       box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
       color: rgba(255, 255, 255, 0.94);
       font-size: 13px;
@@ -398,7 +346,7 @@
       padding: 4px 9px;
       border-radius: 999px;
       border: 1px solid rgba(255, 255, 255, 0.12);
-      background: rgba(5, 5, 7, 0.97);
+      background: var(--clipmaker-flyout-surface);
       box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
       color: rgba(255, 255, 255, 0.96);
       font-size: 11px;
@@ -525,7 +473,7 @@
       padding: 5px 7px;
       border: 1px solid rgba(255, 255, 255, 0.14);
       border-radius: 8px;
-      background: rgba(12, 12, 16, 0.94);
+      background: var(--clipmaker-flyout-surface);
       box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
       color: rgba(255, 255, 255, 0.92);
       font-size: 11px;
@@ -850,10 +798,8 @@
       padding: 5px;
       border: 1px solid rgba(255, 255, 255, 0.16);
       border-radius: 11px;
-      background: rgba(28, 28, 32, 0.96);
+      background: var(--clipmaker-flyout-surface);
       box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-      -webkit-backdrop-filter: blur(18px) saturate(1.2);
-      backdrop-filter: blur(18px) saturate(1.2);
       opacity: 0;
       pointer-events: none;
       transform: translateY(-3px) scale(0.96);
@@ -924,7 +870,7 @@
       min-height: 42px;
       border: 1px solid rgba(255, 255, 255, 0.22);
       border-radius: 8px;
-      background: rgba(255, 255, 255, 0.13);
+      background: var(--clipmaker-raised-surface);
       color: #f4f4f5;
       font: inherit;
       font-weight: 700;
@@ -982,8 +928,8 @@
       gap: 10px;
       margin: 0;
       padding: 10px 18px;
-      background: var(--clipmaker-segment-background);
-      background-color: var(--clipmaker-segment-background);
+      background: transparent;
+      background-color: transparent;
       background-clip: border-box;
       border-bottom: 1px solid var(--clipmaker-glass-border);
       opacity: 1;
@@ -1351,7 +1297,7 @@
       border-radius: 999px;
       border-color: rgba(255, 255, 255, 0.14);
       background: rgba(255, 255, 255, 0.08);
-      color: rgba(244, 244, 245, 0.78);
+      color: rgba(244, 244, 245, 0.92);
       font-size: 11px;
       line-height: 1;
       font-weight: 700;
@@ -1380,26 +1326,28 @@
     .selection-clear-label,
     .selection-clear-icon {
       position: absolute;
-      left: 50%;
-      top: 50%;
+      inset: 0;
+      margin: auto;
       display: flex;
       align-items: center;
       justify-content: center;
       line-height: 1;
       pointer-events: none;
       transition: transform var(--deselect-content-duration) var(--deselect-morph-easing);
-      will-change: transform;
     }
 
     .selection-clear-label {
+      top: -1px;
+      width: 100%;
+      height: 100%;
       white-space: nowrap;
-      transform: translate(-50%, -50%);
+      transform: translateY(0);
     }
 
     .selection-clear-icon {
       width: 14px;
       height: 14px;
-      transform: translate(-50%, calc(-50% - var(--deselect-content-travel)));
+      transform: translateY(calc(0px - var(--deselect-content-travel)));
     }
 
     .selection-clear-icon svg {
@@ -1410,41 +1358,11 @@
     }
 
     .selection-actions.is-search-expanded .selection-clear-label {
-      transform: translate(-50%, calc(-50% + var(--deselect-content-travel)));
+      transform: translateY(var(--deselect-content-travel));
     }
 
     .selection-actions.is-search-expanded .selection-clear-icon {
-      transform: translate(-50%, -50%);
-    }
-
-    .selection-clear-tooltip {
-      position: absolute;
-      right: 0;
-      bottom: calc(100% + 7px);
-      z-index: 3;
-      padding: 4px 7px;
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      border-radius: 7px;
-      background: rgba(20, 20, 24, 0.96);
-      color: #f4f4f5;
-      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
-      font-size: 11px;
-      font-weight: 600;
-      line-height: 1;
-      white-space: nowrap;
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-      transform: translateY(2px);
-      transition: opacity 120ms ease, transform 120ms ease, visibility 0s linear 120ms;
-    }
-
-    .selection-actions.is-search-expanded .selection-clear-pill:hover + .selection-clear-tooltip,
-    .selection-actions.is-search-expanded .selection-clear-pill:focus-visible + .selection-clear-tooltip {
-      opacity: 1;
-      visibility: visible;
       transform: translateY(0);
-      transition-delay: 0ms;
     }
 
     .selection-actions.is-entering .selection-clear-pill,
@@ -1786,10 +1704,8 @@
       padding: 4px;
       border: 1px solid rgba(255, 255, 255, 0.16);
       border-radius: 10px;
-      background: rgba(38, 38, 41, 0.94);
+      background: rgba(12, 12, 16, 0.92);
       box-shadow: 0 10px 26px rgba(0, 0, 0, 0.34), 0 1px 0 rgba(255, 255, 255, 0.05) inset;
-      -webkit-backdrop-filter: blur(18px) saturate(1.2);
-      backdrop-filter: blur(18px) saturate(1.2);
     }
 
     .clip-sort-menu[hidden] {
@@ -1988,7 +1904,7 @@
       border: 1px solid rgba(255, 255, 255, 0.14);
       border-right: 0;
       border-radius: 8px 0 0 8px;
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--clipmaker-raised-surface);
     }
 
     .clip.selected .clip-card-main {
@@ -2007,7 +1923,7 @@
       border: 1px solid rgba(255, 255, 255, 0.14);
       border-left: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 0 8px 8px 0;
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--clipmaker-raised-surface);
       color: rgba(255, 255, 255, 0.74);
       cursor: pointer;
     }
@@ -2191,7 +2107,7 @@
       padding: 8px 10px 9px;
       border: 1px solid rgba(255, 255, 255, 0.16);
       border-radius: 16px;
-      background: rgba(20, 20, 24, 0.96);
+      background: var(--clipmaker-flyout-surface);
       box-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
       opacity: 0;
       pointer-events: none;
@@ -2217,7 +2133,7 @@
       height: 7px;
       border: 1px solid rgba(255, 255, 255, 0.16);
       border-radius: 999px;
-      background: rgba(20, 20, 24, 0.96);
+      background: var(--clipmaker-flyout-surface);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
       transform: translateX(-50%) scale(0.9);
       transition: transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1), opacity 260ms ease;
@@ -2279,6 +2195,333 @@
       color: #fff;
     }
 
+    body.ffmpeg-setup-blocked,
+    body.ffmpeg-setup-blocked main {
+      overflow: hidden;
+    }
+
+    body.ffmpeg-setup-blocked main {
+      visibility: hidden;
+    }
+
+    .ffmpeg-setup-modal[hidden] {
+      display: none !important;
+    }
+
+    .ffmpeg-setup-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      box-sizing: border-box;
+      display: grid;
+      place-items: center;
+      min-width: 0;
+      min-height: 100%;
+      padding: 18px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      background: rgba(18, 18, 22, 0.42);
+      color: rgba(255, 255, 255, 0.94);
+    }
+
+    .ffmpeg-setup-card {
+      box-sizing: border-box;
+      width: min(100%, 420px);
+      padding: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 16px;
+      background: rgba(74, 74, 80, 0.94);
+      box-shadow:
+        0 20px 50px rgba(0, 0, 0, 0.34),
+        inset 0 1px 0 rgba(255, 255, 255, 0.055);
+    }
+
+    .ffmpeg-setup-symbol {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 64px;
+      height: 60px;
+      margin: 0 auto 14px;
+    }
+
+    .ffmpeg-setup-symbol img {
+      display: block;
+      width: 64px;
+      height: auto;
+      opacity: 0.9;
+      filter: invert(1);
+    }
+
+    .ffmpeg-setup-modal[data-phase="checking"] .ffmpeg-setup-symbol,
+    .ffmpeg-setup-modal[data-phase="installing"] .ffmpeg-setup-symbol {
+      animation: ffmpeg-setup-pulse 1.25s ease-in-out infinite;
+    }
+
+    .ffmpeg-setup-modal[data-phase="restart-required"] .ffmpeg-setup-symbol img {
+      opacity: 1;
+    }
+
+    .ffmpeg-setup-title {
+      margin: 0;
+      font-size: 21px;
+      line-height: 1.2;
+      font-weight: 750;
+      text-align: center;
+    }
+
+    .ffmpeg-setup-message {
+      margin: 8px auto 0;
+      max-width: 34em;
+      color: rgba(235, 235, 245, 0.7);
+      font-size: 12px;
+      line-height: 1.45;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .ffmpeg-setup-progress {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      min-height: 20px;
+      margin-top: 18px;
+      color: rgba(235, 235, 245, 0.76);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .ffmpeg-setup-progress[hidden],
+    .ffmpeg-setup-actions[hidden] {
+      display: none !important;
+    }
+
+    .ffmpeg-setup-spinner {
+      box-sizing: border-box;
+      width: 15px;
+      height: 15px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-top-color: rgba(255, 255, 255, 0.9);
+      border-radius: 999px;
+      animation: ffmpeg-setup-spin 700ms linear infinite;
+    }
+
+    .ffmpeg-setup-actions {
+      display: grid;
+      gap: 9px;
+      margin-top: 20px;
+    }
+
+    .ffmpeg-setup-button {
+      box-sizing: border-box;
+      width: 100%;
+      min-height: 38px;
+      padding: 8px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 9px;
+      background: rgba(255, 255, 255, 0.095);
+      color: rgba(255, 255, 255, 0.92);
+      font-size: 13px;
+      line-height: 1.2;
+      font-weight: 700;
+    }
+
+    .ffmpeg-setup-button:hover:not(:disabled) {
+      border-color: rgba(255, 255, 255, 0.24);
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .ffmpeg-setup-button:focus-visible,
+    .ffmpeg-setup-input:focus-visible {
+      outline: 2px solid rgba(69, 156, 255, 0.88);
+      outline-offset: 2px;
+    }
+
+    .ffmpeg-setup-button.is-primary {
+      border-color: rgba(74, 158, 255, 0.7);
+      background: rgba(35, 126, 242, 0.92);
+      color: #fff;
+    }
+
+    .ffmpeg-setup-button.is-primary:hover:not(:disabled) {
+      border-color: rgba(117, 184, 255, 0.88);
+      background: rgba(47, 139, 255, 0.98);
+    }
+
+    .ffmpeg-setup-button.is-link {
+      min-height: 30px;
+      padding: 5px 8px;
+      border-color: transparent;
+      background: transparent;
+      color: rgba(169, 211, 255, 0.9);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .ffmpeg-custom-panel {
+      display: grid;
+      gap: 13px;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .ffmpeg-custom-panel[hidden] {
+      display: none !important;
+    }
+
+    .ffmpeg-setup-field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .ffmpeg-setup-label {
+      color: rgba(255, 255, 255, 0.82);
+      font-size: 12px;
+      line-height: 1.25;
+      font-weight: 650;
+    }
+
+    .ffmpeg-setup-input {
+      box-sizing: border-box;
+      width: 100%;
+      min-width: 0;
+      height: 34px;
+      padding: 6px 41px 6px 9px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.09);
+      color: rgba(255, 255, 255, 0.94);
+      font: 12px ui-monospace, "SF Mono", Menlo, monospace;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    .ffmpeg-setup-path-control {
+      position: relative;
+      min-width: 0;
+    }
+
+    .ffmpeg-setup-browse-button {
+      position: absolute;
+      top: 50%;
+      right: 1px;
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 32px;
+      min-height: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      cursor: pointer;
+      transform: translateY(-50%);
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .ffmpeg-setup-browse-button:hover {
+      background: transparent;
+    }
+
+    .ffmpeg-setup-browse-button:focus-visible {
+      outline: none;
+    }
+
+    .ffmpeg-setup-browse-button img {
+      display: block;
+      width: 18px;
+      height: 18px;
+      opacity: 0.72;
+      filter: invert(1);
+      pointer-events: none;
+      transform: translateY(-0.5px);
+      transition: opacity 120ms ease, filter 120ms ease;
+    }
+
+    .ffmpeg-setup-browse-button:hover img,
+    .ffmpeg-setup-browse-button:focus-visible img {
+      opacity: 1;
+      filter: invert(1) drop-shadow(0 0 2px rgba(255, 255, 255, 0.34));
+    }
+
+    .ffmpeg-setup-input::placeholder {
+      color: rgba(235, 235, 245, 0.36);
+    }
+
+    .ffmpeg-setup-input[aria-invalid="true"] {
+      border-color: rgba(255, 69, 58, 0.78);
+      box-shadow: 0 0 0 2px rgba(255, 69, 58, 0.16);
+    }
+
+    .ffmpeg-custom-note {
+      margin: 0;
+      color: rgba(235, 235, 245, 0.5);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .ffmpeg-setup-error {
+      margin: 14px 0 0;
+      padding: 9px 10px;
+      border: 1px solid rgba(255, 69, 58, 0.32);
+      border-radius: 8px;
+      background: rgba(255, 69, 58, 0.1);
+      color: rgba(255, 194, 190, 0.94);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .ffmpeg-setup-error[hidden] {
+      display: none !important;
+    }
+
+    .ffmpeg-restart-note {
+      margin-top: 18px;
+      padding: 12px;
+      border: 1px solid rgba(52, 199, 89, 0.25);
+      border-radius: 10px;
+      background: rgba(52, 199, 89, 0.1);
+      color: rgba(208, 255, 218, 0.92);
+      font-size: 13px;
+      line-height: 1.4;
+      font-weight: 650;
+      text-align: center;
+    }
+
+    .ffmpeg-restart-note[hidden] {
+      display: none !important;
+    }
+
+    @keyframes ffmpeg-setup-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes ffmpeg-setup-pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(0.95); }
+    }
+
+    @media (max-width: 340px) {
+      .ffmpeg-setup-modal {
+        align-items: start;
+        padding: 12px;
+      }
+
+      .ffmpeg-setup-card {
+        padding: 18px 15px;
+        border-radius: 13px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .ffmpeg-setup-symbol,
+      .ffmpeg-setup-spinner {
+        animation: none !important;
+      }
+    }
+
   </style>
 </head>
 <body>
@@ -2298,12 +2541,11 @@
             <div id="pluginInfoPopover" class="plugin-info-popover" role="tooltip" aria-hidden="true">Press Shift</div>
           </div>
           <div class="top-status-group">
-            <button id="ffmpegWarningPill" class="ffmpeg-status-button is-error" type="button" hidden>error</button>
             <span id="fpsIndicator" class="fps-indicator">-- fps</span>
           </div>
         </div>
         <div id="videoTitleWrap" class="video-title-wrap">
-          <div id="videoTitleViewport" class="video-title-viewport" aria-label="No file" data-full-title="No file">
+          <div id="videoTitleViewport" class="video-title-viewport" data-full-title="No file">
             <span id="videoTitleText" class="video-title-text">No file</span>
           </div>
           <div id="videoTitleBubble" class="video-title-bubble" aria-hidden="true" hidden><span id="videoTitleBubbleText" class="video-title-bubble-text"></span></div>
@@ -2343,10 +2585,10 @@
       </section>
     </section>
 
-    <header class="clipmaker-segment clips-toolbar-segment clips-header">
+    <header id="clipsHeader" class="clipmaker-segment clips-toolbar-segment clips-header">
       <div class="clips-header-left">
         <h2 class="clips-heading">Clips</h2>
-        <div id="clipsCounterGroup" class="clips-counter-group" aria-label="Clips counter" aria-hidden="true" hidden>
+        <div id="clipsCounterGroup" class="clips-counter-group" role="status" aria-live="polite" aria-hidden="true" hidden>
           <span id="clipsTotalCount" class="clips-total-count">0</span>
           <span id="clipsSelectionSummary" class="clips-selection-summary" hidden aria-hidden="true">
             <span id="clipsCounterDot" class="clips-counter-dot">·</span>
@@ -2378,7 +2620,6 @@
                 </span>
               </span>
             </button>
-            <span class="selection-clear-tooltip" role="tooltip" aria-hidden="true">Deselect</span>
           </div>
         </div>
       </div>
@@ -2426,13 +2667,13 @@
       </div>
     </header>
 
-    <section class="clipmaker-segment clips-content-segment">
+    <section id="clipsContentSegment" class="clipmaker-segment clips-content-segment">
       <section id="clipsList" class="clips">
         <div class="empty">No clips yet</div>
       </section>
     </section>
 
-    <section class="clipmaker-segment export-segment">
+    <section id="exportSegment" class="clipmaker-segment export-segment">
       <section class="clip-actions">
         <button id="exportAllButton" class="action-button action-button-primary action-button-wide" type="button" aria-haspopup="menu" disabled>Export All</button>
         <div class="clip-actions-secondary-row">
@@ -2443,6 +2684,61 @@
 
     </section>
   </main>
+  <div
+    id="ffmpegSetupModal"
+    class="ffmpeg-setup-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="ffmpegSetupTitle"
+    aria-describedby="ffmpegSetupMessage"
+    data-phase="checking"
+  >
+    <section class="ffmpeg-setup-card">
+      <div class="ffmpeg-setup-symbol" aria-hidden="true">
+        <img src="assets/film.svg" alt="">
+      </div>
+      <h2 id="ffmpegSetupTitle" class="ffmpeg-setup-title">Checking FFmpeg-full</h2>
+      <p id="ffmpegSetupMessage" class="ffmpeg-setup-message">Checking whether FFmpeg-full is available…</p>
+
+      <div id="ffmpegSetupProgress" class="ffmpeg-setup-progress">
+        <span class="ffmpeg-setup-spinner" aria-hidden="true"></span>
+        <span id="ffmpegSetupProgressText">Checking installation</span>
+      </div>
+
+      <p id="ffmpegSetupError" class="ffmpeg-setup-error" role="alert" hidden></p>
+
+      <div id="ffmpegSetupActions" class="ffmpeg-setup-actions" hidden>
+        <button id="installFfmpegButton" class="ffmpeg-setup-button is-primary" type="button">Install FFmpeg-full</button>
+        <button id="checkFfmpegButton" class="ffmpeg-setup-button is-primary" type="button" hidden>Check Installation</button>
+        <button id="toggleCustomFfmpegButton" class="ffmpeg-setup-button is-link" type="button" aria-expanded="false" aria-controls="ffmpegCustomPanel">FFmpeg-full Setup Options…</button>
+      </div>
+
+      <div id="ffmpegCustomPanel" class="ffmpeg-custom-panel" hidden>
+        <div class="ffmpeg-setup-field">
+          <label class="ffmpeg-setup-label" for="ffmpegInstallationDirectory">FFmpeg-full installation directory</label>
+          <span class="ffmpeg-setup-path-control">
+            <input id="ffmpegInstallationDirectory" class="ffmpeg-setup-input" type="text" placeholder="Default location" autocomplete="off" spellcheck="false">
+            <button id="browseFfmpegInstallationDirectory" class="ffmpeg-setup-browse-button" type="button" aria-label="Browse installation directory">
+              <img src="assets/folder.svg" alt="">
+            </button>
+          </span>
+        </div>
+        <p class="ffmpeg-custom-note">Choose a folder, then click Install FFmpeg-full.<br>Leave blank to use the default location.</p>
+        <div class="ffmpeg-setup-field">
+          <label class="ffmpeg-setup-label" for="existingFfmpegFullPath">Path to existing FFmpeg-full</label>
+          <span class="ffmpeg-setup-path-control">
+            <input id="existingFfmpegFullPath" class="ffmpeg-setup-input" type="text" placeholder="/path/to/ffmpeg" autocomplete="off" spellcheck="false">
+            <button id="browseExistingFfmpegFull" class="ffmpeg-setup-browse-button" type="button" aria-label="Browse existing FFmpeg-full executable">
+              <img src="assets/folder.svg" alt="">
+            </button>
+          </span>
+        </div>
+        <button id="useExistingFfmpegButton" class="ffmpeg-setup-button" type="button">Use Existing FFmpeg-full</button>
+      </div>
+
+      <div id="ffmpegRestartNote" class="ffmpeg-restart-note" hidden>Quit and reopen IINA. ClipMaker will detect FFmpeg-full automatically on the next launch.</div>
+    </section>
+  </div>
   <div id="exportContextMenu" class="export-context-menu" role="menu" aria-label="Export actions" hidden>
     <button id="showExportFolderMenuItem" class="export-context-menu-item" type="button" role="menuitem">
       <svg class="export-context-menu-icon" aria-hidden="true" viewBox="0 0 20 20" focusable="false">

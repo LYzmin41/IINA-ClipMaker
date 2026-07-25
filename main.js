@@ -1,5 +1,6 @@
 const sidebar = iina.sidebar;
 const { core, event, file, menu, mpv, utils } = iina;
+/** @type {Record<string, Function>} */
 const rpc = rpcClient(sidebar);
 
 const STATUS_PENDING = "pending";
@@ -27,6 +28,11 @@ const state = {
   ffmpegFound: false,
   ffmpegStatus: "ffmpeg unchecked",
   ffmpegPath: "",
+  ffmpegCheckComplete: false,
+  ffmpegSetupPhase: "checking",
+  ffmpegSetupMessage: "Checking for FFmpeg-full…",
+  ffmpegRestartRequired: false,
+  homebrewPath: "",
   fps: null,
   currentVideoFps: null,
   displayFps: null,
@@ -58,18 +64,30 @@ let previewStopTimeoutId = null;
 let previewStopToken = 0;
 
 const FALLBACK_FPS = 30;
-const FFMPEG_CANDIDATE_PATHS = [
-  "/opt/homebrew/bin/ffmpeg",
-  "/usr/local/bin/ffmpeg",
-  "/usr/bin/ffmpeg",
-  "/opt/local/bin/ffmpeg"
+const FFMPEG_FULL_CANDIDATE_PATHS = [
+  "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg",
+  "/usr/local/opt/ffmpeg-full/bin/ffmpeg"
 ];
+const FFMPEG_FULL_REQUIRED_CONFIGURATION_FLAGS = Object.freeze([
+  "--enable-libvidstab",
+  "--enable-libvmaf",
+  "--enable-libopencore-amrnb",
+  "--enable-libopencore-amrwb"
+]);
 const FFPROBE_CANDIDATE_PATHS = [
+  "/opt/homebrew/opt/ffmpeg-full/bin/ffprobe",
+  "/usr/local/opt/ffmpeg-full/bin/ffprobe",
   "/opt/homebrew/bin/ffprobe",
   "/usr/local/bin/ffprobe",
   "/usr/bin/ffprobe",
   "/opt/local/bin/ffprobe"
 ];
+const HOMEBREW_CANDIDATE_PATHS = [
+  "/opt/homebrew/bin/brew",
+  "/usr/local/bin/brew"
+];
+const HOMEBREW_INSTALL_URL = "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh";
+const HOMEBREW_REPOSITORY_URL = "https://github.com/Homebrew/brew";
 const DEFAULT_OUTPUT_FOLDER = "~/Desktop";
 const SOURCE_CONTAINER_VALUE = "source";
 const CLIP_SORT_MODES = ["custom", "creation", "name", "duration", "in", "out"];
@@ -104,6 +122,15 @@ function osd(message) {
 function pref(key, fallback) {
   const value = iina.preferences.get(key);
   return value === undefined || value === null ? fallback : value;
+}
+
+function syncPreferences(context) {
+  if (!iina.preferences || typeof iina.preferences.sync !== "function") return;
+  try {
+    iina.preferences.sync();
+  } catch (error) {
+    logError(`Could not persist ${context || "preferences"}`, error);
+  }
 }
 
 function normalizeContainerPreference(value) {
@@ -534,7 +561,7 @@ function pad(number, size) {
 }
 
 function absoluteFrameToTimecode(seconds, fps) {
-  if (typeof seconds !== "number" || !isFinite(seconds)) return "--:--:--:--";
+  if (typeof seconds !== "number" || !isFinite(seconds)) return null;
   const roundedFps = normalizeDisplayFps(fps);
   const safe = Math.max(0, seconds);
   const absoluteFrame = Math.max(0, Math.floor((safe * roundedFps) + 0.000001));
@@ -548,7 +575,9 @@ function absoluteFrameToTimecode(seconds, fps) {
 
 function formatTimecode(seconds, fps) {
   if (typeof seconds !== "number" || !isFinite(seconds)) return "--:--:--:--";
-  const { hours, minutes, wholeSeconds, frame } = absoluteFrameToTimecode(seconds, fps);
+  const timecode = absoluteFrameToTimecode(seconds, fps);
+  if (!timecode) return "--:--:--:--";
+  const { hours, minutes, wholeSeconds, frame } = timecode;
   return `${pad(hours, 2)}:${pad(minutes, 2)}:${pad(wholeSeconds, 2)}:${pad(frame, 2)}`;
 }
 
@@ -677,7 +706,6 @@ function playbackPaused() {
 
   try {
     if (typeof core.status.paused === "boolean") return core.status.paused;
-    if (typeof core.status.isPaused === "boolean") return core.status.isPaused;
     return false;
   } catch (error) {
     return false;
@@ -691,7 +719,8 @@ function setPlaybackPaused(paused) {
     return true;
   } catch (error) {
     try {
-      runMpvCommand(`set pause ${value}`);
+      if (paused) core.pause();
+      else core.resume();
       return true;
     } catch (fallbackError) {
       logError(`Could not set pause=${value}`, fallbackError);
@@ -713,10 +742,7 @@ function playbackSpeed() {
 }
 
 function runMpvCommand(command, args) {
-  if (Array.isArray(args)) {
-    return mpv.command(command, args);
-  }
-  return mpv.command(command);
+  return mpv.command(command, Array.isArray(args) ? args : []);
 }
 
 function cancelPreviewWatcher() {
@@ -745,7 +771,7 @@ function pausePreviewAtStop(token) {
   setPlaybackPaused(true);
   state.positionSeconds = getCurrentPositionSeconds();
   state.lastAction = "preview stopped at Out";
-  postStableState("preview-stop");
+  postStableState();
 }
 
 function startPreviewStopWatcher(target, stopAt) {
@@ -808,11 +834,7 @@ function togglePlayback() {
         throw new Error("could not set pause property");
       }
     } catch (setError) {
-      try {
-        runMpvCommand("cycle", ["pause"]);
-      } catch (cycleError) {
-        runMpvCommand("cycle pause");
-      }
+      runMpvCommand("cycle", ["pause"]);
     }
 
     state.positionSeconds = getCurrentPositionSeconds();
@@ -882,13 +904,8 @@ function addVolume(delta) {
     runMpvCommand("add", ["volume", String(amount)]);
     return true;
   } catch (error) {
-    try {
-      runMpvCommand(`add volume ${amount}`);
-      return true;
-    } catch (fallbackError) {
-      logError(`volume add ${amount} failed safely`, fallbackError);
-      return false;
-    }
+    logError(`volume add ${amount} failed safely`, error);
+    return false;
   }
 }
 
@@ -897,13 +914,8 @@ function toggleMute() {
     runMpvCommand("cycle", ["mute"]);
     return true;
   } catch (error) {
-    try {
-      runMpvCommand("cycle mute");
-      return true;
-    } catch (fallbackError) {
-      logError("mute toggle failed safely", fallbackError);
-      return false;
-    }
+    logError("mute toggle failed safely", error);
+    return false;
   }
 }
 
@@ -1348,32 +1360,102 @@ function normalizeFfmpegPathPreference(value) {
   return text === "ffmpeg" ? "" : text;
 }
 
-function setFfmpegUnavailable(status) {
+function normalizeHomebrewPathPreference(value) {
+  const text = String(value == null ? "" : value).trim();
+  return text === "brew" ? "" : text;
+}
+
+function installationDirectoryFromHomebrewPath(value) {
+  const homebrewPath = normalizeHomebrewPathPreference(value);
+  if (!homebrewPath) return "";
+  return homebrewPath.endsWith("/bin/brew")
+    ? normalizeFolderPath(homebrewPath.slice(0, -"/bin/brew".length))
+    : normalizeFolderPath(homebrewPath);
+}
+
+function homebrewPathFromInstallationDirectory(value) {
+  const directory = normalizeFolderPath(value);
+  return directory ? `${directory}/bin/brew` : "";
+}
+
+function ffmpegPreferenceSignature() {
+  return JSON.stringify([
+    normalizeFfmpegPathPreference(pref("ffmpegPath", "")),
+    booleanPreference("ffmpegFullConfirmed", false),
+    normalizeHomebrewPathPreference(pref("homebrewPath", ""))
+  ]);
+}
+
+function setFfmpegChecking(message) {
   state.ffmpegAvailable = false;
   state.ffmpegFound = false;
   state.ffmpegPath = "";
-  state.ffmpegStatus = status || "ffmpeg off";
-  if (!String(state.ffmpegStatus || "").startsWith("Invalid FFmpeg executable") &&
-      String(state.lastError || "").startsWith("Invalid FFmpeg executable")) {
+  state.ffmpegCheckComplete = false;
+  state.ffmpegStatus = "checking ffmpeg-full";
+  state.ffmpegSetupPhase = "checking";
+  state.ffmpegSetupMessage = message || "Checking for FFmpeg-full…";
+  state.ffmpegRestartRequired = false;
+}
+
+function setFfmpegUnavailable(status, message) {
+  state.ffmpegAvailable = false;
+  state.ffmpegFound = false;
+  state.ffmpegPath = "";
+  state.ffmpegCheckComplete = true;
+  state.ffmpegStatus = status || "ffmpeg-full off";
+  state.ffmpegSetupPhase = "missing";
+  state.ffmpegSetupMessage = message || "Install FFmpeg-full for the best experience.";
+  state.ffmpegRestartRequired = false;
+  if (!String(state.ffmpegStatus || "").startsWith("Invalid FFmpeg") &&
+      String(state.lastError || "").startsWith("Invalid FFmpeg")) {
     state.lastError = "";
   }
   return false;
 }
 
 function rememberFfmpegPreferenceValue(value) {
-  lastObservedFfmpegPathPreference = normalizeFfmpegPathPreference(value);
+  lastObservedFfmpegPathPreference = value === undefined
+    ? ffmpegPreferenceSignature()
+    : JSON.stringify([
+      normalizeFfmpegPathPreference(value),
+      booleanPreference("ffmpegFullConfirmed", false),
+      normalizeHomebrewPathPreference(pref("homebrewPath", ""))
+    ]);
 }
 
-function saveFfmpegPathPreference(path) {
+function saveFfmpegPathPreference(path, confirmed) {
   const normalized = normalizeFfmpegPathPreference(path);
-  rememberFfmpegPreferenceValue(normalized);
+  let changed = false;
   try {
     if (normalizeFfmpegPathPreference(iina.preferences.get("ffmpegPath")) !== normalized) {
       iina.preferences.set("ffmpegPath", normalized);
+      changed = true;
+    }
+    if (confirmed !== undefined && booleanPreference("ffmpegFullConfirmed", false) !== Boolean(confirmed)) {
+      iina.preferences.set("ffmpegFullConfirmed", Boolean(confirmed));
+      changed = true;
     }
   } catch (error) {
     logError("Could not save ffmpeg path preference", error);
   }
+  if (changed) syncPreferences("FFmpeg-full preferences");
+  rememberFfmpegPreferenceValue();
+}
+
+function saveHomebrewPathPreference(path) {
+  const normalized = normalizeHomebrewPathPreference(path);
+  let changed = false;
+  try {
+    if (normalizeHomebrewPathPreference(iina.preferences.get("homebrewPath")) !== normalized) {
+      iina.preferences.set("homebrewPath", normalized);
+      changed = true;
+    }
+  } catch (error) {
+    logError("Could not save Homebrew path preference", error);
+  }
+  if (changed) syncPreferences("Homebrew preferences");
+  state.homebrewPath = normalized;
+  rememberFfmpegPreferenceValue();
 }
 
 function dedupePaths(paths) {
@@ -1425,11 +1507,23 @@ async function validateFfmpegExecutable(candidate) {
     if (result.status !== 0) {
       return { valid: false, path: candidatePath, reason: `exit ${result.status}` };
     }
-    const firstLine = String(`${result.stdout || ""}\n${result.stderr || ""}`).split(/\r?\n/).find(Boolean) || "";
+    const versionOutput = String(`${result.stdout || ""}\n${result.stderr || ""}`);
+    const firstLine = versionOutput.split(/\r?\n/).find(Boolean) || "";
     if (!/^ffmpeg version\b/i.test(firstLine.trim())) {
       return { valid: false, path: candidatePath, reason: "not ffmpeg" };
     }
-    return { valid: true, path: candidatePath, firstLine };
+    const identifiesFullFormula = /(?:^|\/)(?:Cellar|opt)\/ffmpeg-full(?:\/|$)/i.test(candidatePath)
+      || /--prefix=\S*\/(?:Cellar\/)?ffmpeg-full(?:\/|$)/i.test(versionOutput);
+    const missingFullFlags = FFMPEG_FULL_REQUIRED_CONFIGURATION_FLAGS.filter((flag) => !versionOutput.includes(flag));
+    if (!identifiesFullFormula && missingFullFlags.length > 0) {
+      return {
+        valid: false,
+        path: candidatePath,
+        firstLine,
+        reason: "not an FFmpeg-full build"
+      };
+    }
+    return { valid: true, path: candidatePath, firstLine, isFullBuild: true };
   } catch (error) {
     return {
       valid: false,
@@ -1437,6 +1531,122 @@ async function validateFfmpegExecutable(candidate) {
       reason: error && error.message ? error.message : String(error)
     };
   }
+}
+
+async function validateHomebrewExecutable(candidate) {
+  const candidatePath = normalizeHomebrewPathPreference(candidate);
+  if (!candidatePath) return { valid: false, path: "", reason: "empty" };
+  if (!isAbsoluteFilesystemPath(candidatePath)) {
+    return { valid: false, path: candidatePath, reason: "not absolute" };
+  }
+  if (!file.exists(candidatePath)) {
+    return { valid: false, path: candidatePath, reason: "not found" };
+  }
+
+  try {
+    const result = await execWithSoftTimeout(candidatePath, ["--version"], dirname(candidatePath), 2500);
+    if (isDisposed) return { valid: false, path: candidatePath, reason: "disposed" };
+    if (result.timedOut) return { valid: false, path: candidatePath, reason: "timed out" };
+    if (result.status !== 0) {
+      return { valid: false, path: candidatePath, reason: `exit ${result.status}` };
+    }
+    if (!/^homebrew\b/i.test(String(result.stdout || "").trim())) {
+      return { valid: false, path: candidatePath, reason: "not Homebrew" };
+    }
+    return { valid: true, path: candidatePath };
+  } catch (error) {
+    return {
+      valid: false,
+      path: candidatePath,
+      reason: error && error.message ? error.message : String(error)
+    };
+  }
+}
+
+async function validateInstallationDirectory(candidate) {
+  const directory = normalizeFolderPath(utils.resolvePath(String(candidate || "").trim()));
+  if (!directory) return { valid: false, directory: "", path: "", reason: "empty" };
+  if (!isAbsoluteFilesystemPath(directory)) {
+    return { valid: false, directory, path: "", reason: "not absolute" };
+  }
+  if (directory === "/") {
+    return { valid: false, directory, path: "", reason: "choose a dedicated folder instead of the disk root" };
+  }
+
+  const homebrewPath = homebrewPathFromInstallationDirectory(directory);
+  if (!file.exists(homebrewPath)) {
+    return {
+      valid: true,
+      directory,
+      path: homebrewPath,
+      needsBootstrap: true
+    };
+  }
+
+  const homebrew = await validateHomebrewExecutable(homebrewPath);
+  if (!homebrew.valid || isDisposed) {
+    return {
+      valid: false,
+      directory,
+      path: homebrew.path || homebrewPath,
+      reason: "this location is not ready for installation"
+    };
+  }
+
+  try {
+    const result = await execWithSoftTimeout(homebrew.path, ["--prefix"], dirname(homebrew.path), 2500);
+    if (isDisposed) return { valid: false, directory, path: homebrew.path, reason: "disposed" };
+    if (result.timedOut) return { valid: false, directory, path: homebrew.path, reason: "timed out" };
+    if (result.status !== 0) {
+      return { valid: false, directory, path: homebrew.path, reason: `exit ${result.status}` };
+    }
+    const actualDirectory = normalizeFolderPath(String(result.stdout || "").split(/\r?\n/)[0] || "");
+    if (actualDirectory !== directory) {
+      return { valid: false, directory, path: homebrew.path, reason: "installer location does not match this directory" };
+    }
+    return { valid: true, directory, path: homebrew.path, needsBootstrap: false };
+  } catch (error) {
+    return {
+      valid: false,
+      directory,
+      path: homebrew.path,
+      reason: error && error.message ? error.message : String(error)
+    };
+  }
+}
+
+async function bootstrapHomebrewInInstallationDirectory(directory) {
+  const normalizedDirectory = normalizeFolderPath(directory);
+  const parentDirectory = dirname(normalizedDirectory);
+  const mkdirResult = await utils.exec("/bin/mkdir", ["-p", normalizedDirectory], parentDirectory);
+  if (isDisposed) return { valid: false, directory: normalizedDirectory, path: "", reason: "disposed" };
+  if (!mkdirResult || mkdirResult.status !== 0) {
+    const detail = String(mkdirResult && (mkdirResult.stderr || mkdirResult.stdout) || "").trim();
+    return {
+      valid: false,
+      directory: normalizedDirectory,
+      path: "",
+      reason: detail || "the folder could not be created"
+    };
+  }
+
+  const cloneResult = await utils.exec(
+    "/usr/bin/git",
+    ["clone", "--depth=1", HOMEBREW_REPOSITORY_URL, normalizedDirectory],
+    parentDirectory
+  );
+  if (isDisposed) return { valid: false, directory: normalizedDirectory, path: "", reason: "disposed" };
+  if (!cloneResult || cloneResult.status !== 0) {
+    const detail = String(cloneResult && (cloneResult.stderr || cloneResult.stdout) || "").trim();
+    return {
+      valid: false,
+      directory: normalizedDirectory,
+      path: "",
+      reason: detail || "the installer could not be prepared in this folder"
+    };
+  }
+
+  return validateInstallationDirectory(normalizedDirectory);
 }
 
 async function resolveCommandPath(commandPath, args) {
@@ -1450,19 +1660,77 @@ async function resolveCommandPath(commandPath, args) {
   }
 }
 
-async function collectFfmpegCandidates() {
-  const candidates = FFMPEG_CANDIDATE_PATHS.slice();
-  const whichPath = await resolveCommandPath("/usr/bin/which", ["ffmpeg"]);
+async function collectHomebrewCandidates() {
+  const candidates = [];
+  const configuredPath = normalizeHomebrewPathPreference(pref("homebrewPath", ""));
+  if (configuredPath) candidates.push(configuredPath);
+  candidates.push(...HOMEBREW_CANDIDATE_PATHS);
+  const whichPath = await resolveCommandPath("/usr/bin/which", ["brew"]);
   if (whichPath) candidates.push(whichPath);
   return dedupePaths(candidates);
 }
 
-async function findDetectedFfmpeg() {
-  const candidates = await collectFfmpegCandidates();
+async function findHomebrew() {
+  const candidates = await collectHomebrewCandidates();
   for (const candidate of candidates) {
-    const validation = await validateFfmpegExecutable(candidate);
+    const validation = await validateHomebrewExecutable(candidate);
     if (isDisposed) return null;
     if (validation.valid) return validation;
+  }
+  return null;
+}
+
+async function resolveFfmpegFullFromHomebrew(homebrewPath) {
+  const validation = await validateHomebrewExecutable(homebrewPath);
+  if (!validation.valid || isDisposed) {
+    return { valid: false, path: "", brewPath: validation.path || "", reason: validation.reason || "invalid Homebrew" };
+  }
+
+  try {
+    const result = await execWithSoftTimeout(
+      validation.path,
+      ["--prefix", "ffmpeg-full"],
+      dirname(validation.path),
+      6000
+    );
+    if (isDisposed) return { valid: false, path: "", brewPath: validation.path, reason: "disposed" };
+    if (result.timedOut) return { valid: false, path: "", brewPath: validation.path, reason: "timed out" };
+    if (result.status !== 0) {
+      return { valid: false, path: "", brewPath: validation.path, reason: "ffmpeg-full not installed" };
+    }
+    const prefix = normalizeFolderPath(String(result.stdout || "").split(/\r?\n/)[0] || "");
+    const candidate = prefix ? `${prefix}/bin/ffmpeg` : "";
+    const ffmpegValidation = await validateFfmpegExecutable(candidate);
+    return Object.assign({}, ffmpegValidation, { brewPath: validation.path });
+  } catch (error) {
+    return {
+      valid: false,
+      path: "",
+      brewPath: validation.path,
+      reason: error && error.message ? error.message : String(error)
+    };
+  }
+}
+
+async function findDetectedFfmpegFull() {
+  const candidates = FFMPEG_FULL_CANDIDATE_PATHS.slice();
+  const configuredPath = normalizeFfmpegPathPreference(pref("ffmpegPath", ""));
+  const configuredConfirmed = booleanPreference("ffmpegFullConfirmed", false);
+  if (configuredPath && (configuredConfirmed || configuredPath.includes("/ffmpeg-full/"))) {
+    candidates.unshift(configuredPath);
+  }
+
+  for (const candidate of dedupePaths(candidates)) {
+    const validation = await validateFfmpegExecutable(candidate);
+    if (isDisposed) return null;
+    if (validation.valid) return Object.assign({}, validation, { source: "path" });
+  }
+
+  const homebrewCandidates = await collectHomebrewCandidates();
+  for (const homebrewCandidate of homebrewCandidates) {
+    const resolution = await resolveFfmpegFullFromHomebrew(homebrewCandidate);
+    if (isDisposed) return null;
+    if (resolution.valid) return Object.assign({}, resolution, { source: "homebrew" });
   }
   return null;
 }
@@ -1517,13 +1785,13 @@ async function refreshFfmpegIfPreferenceChanged(force) {
   const now = Date.now();
   if (!force && now - lastFfmpegPreferencePollTime < 1000) return;
   lastFfmpegPreferencePollTime = now;
-  const current = normalizeFfmpegPathPreference(pref("ffmpegPath", ""));
+  const current = ffmpegPreferenceSignature();
   if (!force && current === lastObservedFfmpegPathPreference) return;
 
   ffmpegPreferenceCheckInFlight = true;
   try {
     await detectStableFfmpeg();
-    if (!isDisposed) postStableState("ffmpeg-preference-changed");
+    if (!isDisposed) postStableState();
   } catch (error) {
     logError("ffmpeg preference refresh failed", error);
   } finally {
@@ -1534,37 +1802,41 @@ async function refreshFfmpegIfPreferenceChanged(force) {
 async function resolveConfiguredOrDetectedFfmpeg() {
   const rawConfiguredPath = pref("ffmpegPath", "");
   const configuredPath = normalizeFfmpegPathPreference(rawConfiguredPath);
-  rememberFfmpegPreferenceValue(configuredPath);
+  const configuredConfirmed = booleanPreference("ffmpegFullConfirmed", false);
+  rememberFfmpegPreferenceValue();
 
-  if (configuredPath) {
+  if (rawConfiguredPath === "ffmpeg") {
+    saveFfmpegPathPreference("", false);
+  }
+
+  if (configuredPath && configuredConfirmed) {
     const configuredValidation = await validateFfmpegExecutable(configuredPath);
     if (isDisposed) return false;
     if (configuredValidation.valid) {
       return setStableFfmpegFound(configuredValidation.path, configuredValidation.path, "manual");
     }
-
-    state.lastError = configuredValidation.reason ? `Invalid FFmpeg executable: ${configuredValidation.reason}` : "";
-    return setFfmpegUnavailable("Invalid FFmpeg executable");
+    state.lastError = configuredValidation.reason
+      ? `Invalid FFmpeg-full executable: ${configuredValidation.reason}`
+      : "Invalid FFmpeg-full executable";
+    return setFfmpegUnavailable("Invalid FFmpeg-full executable", state.lastError);
   }
 
-  if (rawConfiguredPath === "ffmpeg") {
-    saveFfmpegPathPreference("");
-  }
-
-  const detected = await findDetectedFfmpeg();
+  const detected = await findDetectedFfmpegFull();
   if (isDisposed) return false;
   if (detected && detected.valid) {
-    saveFfmpegPathPreference(detected.path);
-    return setStableFfmpegFound(detected.path, detected.path, "detected");
+    if (detected.brewPath) saveHomebrewPathPreference(detected.brewPath);
+    saveFfmpegPathPreference(detected.path, true);
+    return setStableFfmpegFound(detected.path, detected.path, detected.source || "detected");
   }
 
-  saveFfmpegPathPreference("");
-  return setFfmpegUnavailable("FFmpeg not found");
+  state.lastError = "";
+  saveFfmpegPathPreference("", false);
+  return setFfmpegUnavailable("FFmpeg-full not found");
 }
 
 function showPanel() {
   sidebar.show();
-  postStableState("show-panel");
+  postStableState();
 }
 
 function setInPoint() {
@@ -1573,14 +1845,14 @@ function setInPoint() {
   if (position === null) {
     state.lastAction = "set-in failed: no current position";
     osd("Cannot set In: no valid position.");
-    postStableState("set-in-failed");
+    postStableState();
     return;
   }
   state.inPoint = position;
   state.lastError = "";
   state.lastAction = `set-in received at ${formatTimecode(position, displayFps())}`;
   osd(`In set at ${formatTimecode(position, displayFps())}`);
-  postStableState("set-in");
+  postStableState();
 }
 
 function setOutPoint() {
@@ -1589,14 +1861,14 @@ function setOutPoint() {
   if (position === null) {
     state.lastAction = "set-out failed: no current position";
     osd("Cannot set Out: no valid position.");
-    postStableState("set-out-failed");
+    postStableState();
     return;
   }
   state.outPoint = position;
   state.lastError = "";
   state.lastAction = `set-out received at ${formatTimecode(position, displayFps())}`;
   osd(`Out set at ${formatTimecode(position, displayFps())}`);
-  postStableState("set-out");
+  postStableState();
 }
 
 function clearMarks() {
@@ -1605,7 +1877,7 @@ function clearMarks() {
   state.lastError = "";
   state.lastAction = "clear-marks received";
   osd("Current marks cleared.");
-  postStableState("clear-marks");
+  postStableState();
 }
 
 function addClipFromMarks() {
@@ -1637,7 +1909,7 @@ function addClipFromMarks() {
   state.lastAction = `add-clip received: ${clip.name}`;
   state.exportMessage = `${clip.name} added`;
   osd(`${clip.name} added (${formatDurationTimecode(clip.duration, displayFps())})`);
-  postStableState("add-clip");
+  postStableState();
 }
 
 function validateReadyForClip() {
@@ -1646,28 +1918,28 @@ function validateReadyForClip() {
     state.lastAction = "add-clip invalid: no local video";
     osd("Open a local video first.");
     maybeShowSidebarForInvalidExport();
-    postStableState("add-clip-invalid");
+    postStableState();
     return false;
   }
   if (core.status.isNetworkResource) {
     state.lastError = "Network streams are not supported.";
     state.lastAction = "add-clip invalid: network stream";
     osd("Network streams are not supported yet.");
-    postStableState("add-clip-invalid");
+    postStableState();
     return false;
   }
   if (!file.exists(state.currentSourcePath)) {
     state.lastError = "Source file could not be found on disk.";
     state.lastAction = "add-clip invalid: source file missing";
     osd("Source file could not be found.");
-    postStableState("add-clip-invalid");
+    postStableState();
     return false;
   }
   if (!hasValidRange()) {
     state.lastError = "Set both In and Out, with Out after In.";
     state.lastAction = "add-clip invalid: range missing";
     osd("Set a valid In/Out range first.");
-    postStableState("add-clip-invalid");
+    postStableState();
     return false;
   }
   return true;
@@ -1685,11 +1957,11 @@ function clearClipList() {
   state.exportMessage = "Clip list cleared";
   state.lastError = "";
   osd("Clip list cleared.");
-  postStableState("clear-list");
+  postStableState();
 }
 
 function maybeShowSidebarForInvalidExport() {
-  if (Boolean(pref("showSidebarOnInvalidExport", true))) {
+  if (booleanPreference("showSidebarOnInvalidExport", true)) {
     showPanel();
   }
 }
@@ -1700,7 +1972,7 @@ async function exportSelectedClip() {
     state.lastError = "Select a clip before exporting.";
     osd("Select a clip first.");
     maybeShowSidebarForInvalidExport();
-    postStableState("export-invalid");
+    postStableState();
     return;
   }
   await exportStableClips(false);
@@ -1711,7 +1983,7 @@ async function exportAllClips() {
     state.lastError = "Add at least one clip before exporting.";
     osd("Add at least one clip first.");
     maybeShowSidebarForInvalidExport();
-    postStableState("export-invalid");
+    postStableState();
     return;
   }
   await exportStableClips(true);
@@ -1722,22 +1994,6 @@ async function ensureDirectory(folder) {
   const result = await utils.exec("/bin/mkdir", ["-p", folder]);
   if (result.status !== 0) {
     throw new Error(`Could not create output folder (status ${result.status})`);
-  }
-}
-
-function promptText(message, defaultValue) {
-  try {
-    const result = utils.prompt(message, defaultValue || "");
-    return result === undefined || result === null ? null : String(result);
-  } catch (error) {
-    logError("Prompt with default value failed; retrying without default", error);
-    try {
-      const result = utils.prompt(defaultValue ? `${message}\nDefault: ${defaultValue}` : message);
-      return result === undefined || result === null ? null : String(result);
-    } catch (fallbackError) {
-      logError("Prompt failed", fallbackError);
-      return null;
-    }
   }
 }
 
@@ -1794,7 +2050,7 @@ function rpcClient(iinaModule) {
       if (typeof value !== "function") {
         throw new Error("RPC server only accepts functions");
       }
-      if (!name.startsWith("$")) {
+      if (typeof name !== "string" || !name.startsWith("$")) {
         throw new Error("Define RPC functions with $ prefix");
       }
 
@@ -1987,6 +2243,15 @@ function buildStableState() {
     ffmpegFound: state.ffmpegFound,
     ffmpegStatus: state.ffmpegStatus,
     ffmpegPath: state.ffmpegPath,
+    ffmpegFullRequired: true,
+    ffmpegCheckComplete: state.ffmpegCheckComplete,
+    ffmpegSetupPhase: state.ffmpegSetupPhase,
+    ffmpegSetupMessage: state.ffmpegSetupMessage,
+    ffmpegRestartRequired: state.ffmpegRestartRequired,
+    homebrewPath: state.homebrewPath || normalizeHomebrewPathPreference(pref("homebrewPath", "")),
+    installationDirectory: installationDirectoryFromHomebrewPath(
+      state.homebrewPath || normalizeHomebrewPathPreference(pref("homebrewPath", ""))
+    ),
     canSetMarks: true,
     canClearMarks: state.inPoint !== null || state.outPoint !== null,
     canClearList: state.clips.length > 0 && !exportIsBusy(),
@@ -1998,7 +2263,7 @@ function buildStableState() {
   };
 }
 
-function postStableState(reason) {
+function postStableState() {
   if (isDisposed) return null;
   const payload = buildStableState();
   if (!payload || isDisposed) return payload;
@@ -2018,17 +2283,190 @@ function setStableFfmpegFound(path, label, source) {
   state.ffmpegAvailable = true;
   state.ffmpegFound = true;
   state.ffmpegPath = path;
-  state.ffmpegStatus = source === "detected"
-    ? `ffmpeg detected: ${label || path}`
-    : `ffmpeg on: ${label || path}`;
-  state.lastError = String(state.lastError || "").startsWith("Invalid FFmpeg executable") ? "" : state.lastError;
+  state.ffmpegCheckComplete = true;
+  state.ffmpegSetupPhase = "ready";
+  state.ffmpegSetupMessage = "FFmpeg-full is ready.";
+  state.ffmpegRestartRequired = false;
+  state.ffmpegStatus = source === "homebrew"
+    ? `ffmpeg-full detected through Homebrew: ${label || path}`
+    : `ffmpeg-full on: ${label || path}`;
+  state.lastError = String(state.lastError || "").startsWith("Invalid FFmpeg") ? "" : state.lastError;
   return true;
 }
 
 async function detectStableFfmpeg() {
   if (isDisposed) return false;
+  setFfmpegChecking();
   const resolved = await resolveConfiguredOrDetectedFfmpeg();
   return resolved;
+}
+
+function setFfmpegSetupError(message) {
+  const detail = String(message || "FFmpeg-full installation failed.").trim();
+  state.ffmpegAvailable = false;
+  state.ffmpegFound = false;
+  state.ffmpegPath = "";
+  state.ffmpegCheckComplete = true;
+  state.ffmpegSetupPhase = "error";
+  state.ffmpegSetupMessage = detail;
+  state.ffmpegRestartRequired = false;
+  state.ffmpegStatus = "ffmpeg-full installation failed";
+  state.lastError = detail;
+  state.lastAction = `ffmpeg-full setup failed: ${detail}`;
+  return buildStableState();
+}
+
+function setFfmpegRestartRequired(path, homebrewPath) {
+  const normalizedPath = normalizeFfmpegPathPreference(path);
+  const normalizedHomebrewPath = normalizeHomebrewPathPreference(homebrewPath);
+  saveFfmpegPathPreference(normalizedPath, true);
+  if (normalizedHomebrewPath) saveHomebrewPathPreference(normalizedHomebrewPath);
+  state.ffmpegAvailable = false;
+  state.ffmpegFound = true;
+  state.ffmpegPath = normalizedPath;
+  state.ffmpegCheckComplete = true;
+  state.ffmpegSetupPhase = "restart-required";
+  state.ffmpegSetupMessage = "FFmpeg-full was installed successfully. Restart IINA to finish setup.";
+  state.ffmpegRestartRequired = true;
+  state.ffmpegStatus = "ffmpeg-full installed; restart required";
+  state.lastError = "";
+  state.lastAction = "ffmpeg-full installed; restart IINA";
+  return buildStableState();
+}
+
+function homebrewTerminalInstallCommand() {
+  return `/bin/bash -c "$(curl -fsSL ${HOMEBREW_INSTALL_URL})"` +
+    ' && { if [ -x /opt/homebrew/bin/brew ]; then "/opt/homebrew/bin/brew" install ffmpeg-full;' +
+    ' elif [ -x /usr/local/bin/brew ]; then "/usr/local/bin/brew" install ffmpeg-full;' +
+    ' else echo "Homebrew was not found after installation."; exit 1; fi; }' +
+    ' && printf "\\nFFmpeg-full installation finished. Return to IINA and click Check Installation.\\n"';
+}
+
+async function launchHomebrewInstallInTerminal() {
+  const command = homebrewTerminalInstallCommand();
+  const result = await utils.exec("/usr/bin/osascript", [
+    "-e", 'tell application "Terminal"',
+    "-e", "activate",
+    "-e", `do script ${JSON.stringify(command)}`,
+    "-e", "end tell"
+  ]);
+  if (!result || result.status !== 0) {
+    throw new Error(result && (result.stderr || result.stdout) || "Could not open Terminal");
+  }
+}
+
+async function installFfmpegFull(options) {
+  if (isDisposed) return null;
+  const setupOptions = options && typeof options === "object" ? options : {};
+  const requestedInstallationDirectory = normalizeFolderPath(
+    utils.resolvePath(String(setupOptions.installationDirectory || "").trim())
+  );
+  let homebrew = null;
+
+  if (requestedInstallationDirectory) {
+    homebrew = await validateInstallationDirectory(requestedInstallationDirectory);
+    if (isDisposed) return null;
+    if (!homebrew.valid) {
+      return setFfmpegSetupError(`Invalid installation directory: ${homebrew.reason || "not found"}`);
+    }
+  } else {
+    homebrew = await findHomebrew();
+    if (isDisposed) return null;
+  }
+
+  if (!homebrew || !homebrew.valid) {
+    try {
+      state.ffmpegAvailable = false;
+      state.ffmpegFound = false;
+      state.ffmpegCheckComplete = true;
+      state.ffmpegSetupPhase = "installing-terminal";
+      state.ffmpegSetupMessage = "Complete the guided FFmpeg-full setup in Terminal, then return here.";
+      state.ffmpegRestartRequired = false;
+      state.ffmpegStatus = "installing ffmpeg-full in Terminal";
+      state.lastError = "";
+      state.lastAction = "opened ffmpeg-full installation in Terminal";
+      postStableState();
+      await launchHomebrewInstallInTerminal();
+      if (isDisposed) return null;
+      return buildStableState();
+    } catch (error) {
+      return setFfmpegSetupError(error && error.message ? error.message : String(error));
+    }
+  }
+
+  state.ffmpegAvailable = false;
+  state.ffmpegFound = false;
+  state.ffmpegCheckComplete = true;
+  state.ffmpegSetupPhase = "installing";
+  state.ffmpegSetupMessage = "Installing FFmpeg-full. This may take several minutes.";
+  state.ffmpegRestartRequired = false;
+  state.ffmpegStatus = "installing ffmpeg-full";
+  state.lastError = "";
+  state.lastAction = "installing ffmpeg-full";
+  postStableState();
+
+  try {
+    if (homebrew.needsBootstrap) {
+      const preparedHomebrew = await bootstrapHomebrewInInstallationDirectory(homebrew.directory);
+      if (isDisposed) return null;
+      if (!preparedHomebrew.valid || preparedHomebrew.needsBootstrap) {
+        throw new Error(`Installation directory could not be prepared: ${preparedHomebrew.reason || "installer not found"}`);
+      }
+      homebrew = preparedHomebrew;
+    }
+
+    saveHomebrewPathPreference(homebrew.path);
+    const result = await utils.exec(homebrew.path, ["install", "ffmpeg-full"], dirname(homebrew.path));
+    if (isDisposed) return null;
+    if (!result || result.status !== 0) {
+      const detail = String(result && (result.stderr || result.stdout) || "").trim();
+      throw new Error(detail || `Homebrew exited with status ${result && result.status}`);
+    }
+    const resolution = await resolveFfmpegFullFromHomebrew(homebrew.path);
+    if (isDisposed) return null;
+    if (!resolution.valid) {
+      throw new Error(`FFmpeg-full was not found after installation: ${resolution.reason || "unknown error"}`);
+    }
+    return setFfmpegRestartRequired(resolution.path, homebrew.path);
+  } catch (error) {
+    return setFfmpegSetupError(error && error.message ? error.message : String(error));
+  }
+}
+
+async function checkFfmpegFullInstallation() {
+  if (isDisposed) return null;
+  setFfmpegChecking("Checking the completed installation…");
+  postStableState();
+  const detected = await findDetectedFfmpegFull();
+  if (isDisposed) return null;
+  if (!detected || !detected.valid) {
+    state.ffmpegCheckComplete = true;
+    state.ffmpegSetupPhase = "installing-terminal";
+    state.ffmpegSetupMessage = "FFmpeg-full is not available yet. Finish the Terminal installation and try again.";
+    state.ffmpegStatus = "waiting for ffmpeg-full installation";
+    state.lastError = "";
+    state.lastAction = "ffmpeg-full installation not finished";
+    return buildStableState();
+  }
+  return setFfmpegRestartRequired(detected.path, detected.brewPath || "");
+}
+
+async function useExistingFfmpegFull(options) {
+  if (isDisposed) return null;
+  const setupOptions = options && typeof options === "object" ? options : {};
+  const requestedPath = normalizeFfmpegPathPreference(setupOptions.ffmpegPath);
+  if (!requestedPath) return setFfmpegSetupError("Choose an existing FFmpeg-full executable.");
+
+  const validation = await validateFfmpegExecutable(requestedPath);
+  if (isDisposed) return null;
+  if (!validation.valid) {
+    return setFfmpegSetupError(`Invalid FFmpeg-full executable: ${validation.reason || "not found"}`);
+  }
+
+  saveFfmpegPathPreference(validation.path, true);
+  setStableFfmpegFound(validation.path, validation.path, "manual");
+  state.lastAction = `using existing ffmpeg-full: ${validation.path}`;
+  return buildStableState();
 }
 
 function stableOutputExtension(clip) {
@@ -2101,6 +2539,57 @@ async function chooseExportFolder() {
     const chosenPath = normalizeFolderPath(result.stdout);
     if (!chosenPath) return { ok: false, cancelled: true };
     return { ok: true, path: chosenPath };
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    if (message.includes("-128") || message.toLowerCase().includes("user canceled")) {
+      return { ok: false, cancelled: true };
+    }
+    return { ok: false, error: message };
+  }
+}
+
+function pickerResultWasCancelled(result) {
+  const detail = `${result && result.stderr || ""} ${result && result.stdout || ""}`.toLowerCase();
+  return detail.includes("-128") || detail.includes("user canceled");
+}
+
+async function chooseFfmpegInstallationDirectory() {
+  try {
+    const result = await utils.exec("/usr/bin/osascript", [
+      "-e",
+      'set chosenFolder to choose folder with prompt "Choose where to install FFmpeg-full"',
+      "-e",
+      "POSIX path of chosenFolder"
+    ]);
+    if (!result || result.status !== 0) {
+      if (pickerResultWasCancelled(result)) return { ok: false, cancelled: true };
+      return { ok: false, error: result && (result.stderr || result.stdout) || "Could not open the folder picker" };
+    }
+    const chosenPath = normalizeFolderPath(String(result.stdout || ""));
+    return chosenPath ? { ok: true, path: chosenPath } : { ok: false, cancelled: true };
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    if (message.includes("-128") || message.toLowerCase().includes("user canceled")) {
+      return { ok: false, cancelled: true };
+    }
+    return { ok: false, error: message };
+  }
+}
+
+async function chooseExistingFfmpegFullExecutable() {
+  try {
+    const result = await utils.exec("/usr/bin/osascript", [
+      "-e",
+      'set chosenFile to choose file with prompt "Choose the FFmpeg-full executable"',
+      "-e",
+      "POSIX path of chosenFile"
+    ]);
+    if (!result || result.status !== 0) {
+      if (pickerResultWasCancelled(result)) return { ok: false, cancelled: true };
+      return { ok: false, error: result && (result.stderr || result.stdout) || "Could not open the file picker" };
+    }
+    const chosenPath = normalizeFfmpegPathPreference(String(result.stdout || ""));
+    return chosenPath ? { ok: true, path: chosenPath } : { ok: false, cancelled: true };
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
     if (message.includes("-128") || message.toLowerCase().includes("user canceled")) {
@@ -2415,7 +2904,7 @@ async function exportStableClips(all, selectedIds, orderedVisibleIds) {
 
   exportPreflightInFlight = true;
   state.exportMessage = "Preparing export...";
-  postStableState("export-preflight");
+  postStableState();
   const exportModeSnapshot = exportMode();
   const audioStreamsBySource = new Map();
   let outputFolder = "";
@@ -2425,7 +2914,7 @@ async function exportStableClips(all, selectedIds, orderedVisibleIds) {
     }
     if (isDisposed || generation !== exportGeneration) return null;
     if (!state.ffmpegAvailable || !state.ffmpegPath) {
-      state.lastAction = "ffmpeg not found";
+      state.lastAction = "ffmpeg-full not found";
       return buildStableState();
     }
 
@@ -2460,7 +2949,7 @@ async function exportStableClips(all, selectedIds, orderedVisibleIds) {
   state.exporting = true;
   state.lastError = "";
   state.exportMessage = `Exporting ${clips.length} clip${clips.length === 1 ? "" : "s"}...`;
-  postStableState("export-start");
+  postStableState();
   const deleteClipsAfterExportSnapshot = deleteClipsAfterExportPreference();
 
   try {
@@ -2497,7 +2986,7 @@ async function exportStableClips(all, selectedIds, orderedVisibleIds) {
       );
       const args = plan.args;
       state.lastAction = `exporting clip ${index + 1}/${clips.length}`;
-      postStableState("export-progress");
+      postStableState();
       const result = await utils.exec(state.ffmpegPath, args, dirname(outputPath));
       if (isDisposed || generation !== exportGeneration) return null;
       const processOutput = `${result.stdout || ""}\n${result.stderr || ""}`.toLowerCase();
@@ -2518,7 +3007,7 @@ async function exportStableClips(all, selectedIds, orderedVisibleIds) {
       exportedCount += 1;
       successfullyExportedClipIds.add(clip.id);
       state.lastAction = `clip ${index + 1}/${clips.length} exported`;
-      postStableState("export-clip-done");
+      postStableState();
       revealExportedFile(outputPath);
     } catch (error) {
       if (isDisposed || generation !== exportGeneration) return null;
@@ -2528,7 +3017,7 @@ async function exportStableClips(all, selectedIds, orderedVisibleIds) {
       state.lastError = error && error.message ? error.message : String(error);
       state.lastAction = `clip ${index + 1}/${clips.length} export failed`;
       logError(`export failed for clip ${index + 1}`, error);
-      postStableState("export-clip-failed");
+      postStableState();
     }
   }
 
@@ -2540,7 +3029,7 @@ async function exportStableClips(all, selectedIds, orderedVisibleIds) {
   state.exporting = false;
   state.exportMessage = `Export complete: ${exportedCount}/${clips.length}`;
   state.lastAction = "export complete";
-  return postStableState("export-complete");
+  return postStableState();
 }
 
 function addStableClip() {
@@ -2675,6 +3164,7 @@ function registerStableRpcMethods() {
           "clipSortDirection",
           sourceSortMode === "custom" ? sourceSortDirection : "ascending"
         );
+        syncPreferences("clip sorting preferences");
       } catch (error) {
         logError("Could not switch clip sorting to Custom", error);
       }
@@ -2715,6 +3205,7 @@ function registerStableRpcMethods() {
     try {
       iina.preferences.set("clipSortMode", nextMode);
       iina.preferences.set("clipSortDirection", nextDirection);
+      syncPreferences("clip sorting preferences");
       state.visibleClipIds = null;
       state.lastAction = `clip sort: ${nextMode} ${nextDirection}`;
     } catch (error) {
@@ -2758,21 +3249,29 @@ function registerStableRpcMethods() {
     return showContainingExportFolder();
   };
 
-  rpc.$setFfmpeg = async function () {
+  rpc.$installFfmpegFull = async function (options) {
     if (isDisposed) return null;
-    const current = state.ffmpegPath || normalizeFfmpegPathPreference(pref("ffmpegPath", ""));
-    const entered = promptText("Path to ffmpeg:", current);
-    if (entered !== null) {
-      try {
-        iina.preferences.set("ffmpegPath", normalizeFfmpegPathPreference(entered));
-      } catch (error) {
-        logError("Could not save ffmpeg path preference", error);
-      }
-    }
-    await detectStableFfmpeg();
+    return installFfmpegFull(options);
+  };
+
+  rpc.$checkFfmpegFull = async function () {
     if (isDisposed) return null;
-    state.lastAction = state.ffmpegAvailable ? `ffmpeg found: ${state.ffmpegPath}` : "ffmpeg not found";
-    return buildStableState();
+    return checkFfmpegFullInstallation();
+  };
+
+  rpc.$useExistingFfmpegFull = async function (options) {
+    if (isDisposed) return null;
+    return useExistingFfmpegFull(options);
+  };
+
+  rpc.$browseFfmpegInstallationDirectory = async function () {
+    if (isDisposed) return null;
+    return chooseFfmpegInstallationDirectory();
+  };
+
+  rpc.$browseExistingFfmpegFull = async function () {
+    if (isDisposed) return null;
+    return chooseExistingFfmpegFullExecutable();
   };
 
   rpc.$playerHotkey = function (payload) {
@@ -2826,7 +3325,7 @@ function startStablePositionTimer() {
     try {
       refreshFfmpegIfPreferenceChanged(false);
       refreshShortcutMenuIfPreferenceChanged(false);
-      postStableState("position-tick");
+      postStableState();
     } catch (error) {
       logError("stable position update failed", error);
     }
@@ -2856,7 +3355,7 @@ setEventListener("iina.window-loaded", () => {
   setTrackedTimeout(() => {
     if (isDisposed) return;
     state.lastAction = "ready";
-    postStableState("startup");
+    postStableState();
   }, 500);
 
   setTrackedTimeout(async () => {
@@ -2864,7 +3363,7 @@ setEventListener("iina.window-loaded", () => {
     try {
       await detectStableFfmpeg();
       if (isDisposed) return;
-      postStableState("ffmpeg-detected");
+      postStableState();
     } catch (error) {
       logError("delayed ffmpeg detection failed", error);
     }

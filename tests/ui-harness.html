@@ -5,6 +5,13 @@
   fetch("/sidebar.html")
     .then((response) => response.text())
     .then((source) => {
+      const videoTone = new URLSearchParams(window.location.search).get("videoTone");
+      const simulatedVideoBackground = videoTone === "cool"
+        ? "radial-gradient(circle at 18% 18%, #d8dcff 0 12%, transparent 34%), radial-gradient(circle at 78% 22%, #6655ba 0 14%, transparent 42%), linear-gradient(145deg, #172e4c, #384a82 52%, #191d35)"
+        : "radial-gradient(circle at 10% 24%, #d9b38b 0 12%, transparent 32%), radial-gradient(circle at 72% 18%, #73754a 0 16%, transparent 40%), linear-gradient(145deg, #7f5b3f, #393d28 48%, #69443d)";
+      const backdropStyle = videoTone
+        ? `<style id="simulatedVideoBackdrop">html { background: ${simulatedVideoBackground} fixed !important; background-size: cover !important; }</style>`
+        : "";
       const mock = `<script>
         (() => {
           const listeners = new Map();
@@ -80,6 +87,9 @@
               }, delayMs);
             });
           };
+          const harnessParams = new URLSearchParams(window.location.search);
+          const ffmpegMissing = harnessParams.has("ffmpegMissing");
+          const ffmpegRestart = harnessParams.has("ffmpegRestart");
           const state = {
             currentFileName: "Вас снова убили, мистер детектив — 07 серия — финальная режиссерская версия.mp4",
             currentFilePath: "/tmp/Вас снова убили, мистер детектив — 07 серия — финальная режиссерская версия.mp4",
@@ -97,8 +107,19 @@
             canClearList: true,
             canExportAll: true,
             canExportSelected: true,
-            ffmpegAvailable: true,
-            ffmpegFound: true,
+            ffmpegAvailable: !ffmpegMissing && !ffmpegRestart,
+            ffmpegFound: !ffmpegMissing,
+            ffmpegFullRequired: true,
+            ffmpegCheckComplete: true,
+            ffmpegSetupPhase: ffmpegRestart ? "restart-required" : ffmpegMissing ? "missing" : "ready",
+            ffmpegSetupMessage: ffmpegRestart
+              ? "FFmpeg-full was installed successfully. Restart IINA to finish setup."
+              : ffmpegMissing
+                ? "Install FFmpeg-full for the best experience."
+                : "FFmpeg-full is ready.",
+            ffmpegRestartRequired: ffmpegRestart,
+            homebrewPath: "",
+            installationDirectory: "",
             exporting: false,
             selectedClipIds: [2],
             selectedClipId: 2,
@@ -111,6 +132,24 @@
               { id: 1, creationSequence: 1, name: "Gamma", inPoint: 1, outPoint: 3, duration: 2, selected: false, exportStatus: "pending" }
             ]
           };
+          if (harnessParams.has("manyClips")) {
+            state.clips = Array.from({ length: 14 }, (_, index) => {
+              const id = 14 - index;
+              const inPoint = id * 2;
+              return {
+                id,
+                creationSequence: id,
+                name: \`Clip \${String(id).padStart(2, "0")}\`,
+                inPoint,
+                outPoint: inPoint + 1,
+                duration: 1,
+                selected: id === 12,
+                exportStatus: "pending"
+              };
+            });
+            state.selectedClipIds = [12];
+            state.selectedClipId = 12;
+          }
           const applyClipOrder = (orderedIds) => {
             if (!Array.isArray(orderedIds) || orderedIds.length !== state.clips.length) return;
             const clipsById = new Map(state.clips.map((clip) => [String(clip.id), clip]));
@@ -160,7 +199,14 @@
                 state.selectedClipId = state.selectedClipIds.length ? state.selectedClipIds.at(-1) : null;
               }
               const response = listeners.get(name.replace("#call.", "#on."));
-              if (response) setTimeout(() => response({ res: state }), 0);
+              let responsePayload = state;
+              if (name === "#call.$browseFfmpegInstallationDirectory") {
+                responsePayload = { ok: true, path: "/Users/tester/Tools/FFmpeg-full" };
+              }
+              if (name === "#call.$browseExistingFfmpegFull") {
+                responsePayload = { ok: true, path: "/Users/tester/bin/ffmpeg" };
+              }
+              if (response) setTimeout(() => response({ res: responsePayload }), 0);
               if (name === "#call.$setClipSort") {
                 setTimeout(() => captureSortIconSamples(state.clipSortDirection), 0);
               }
@@ -182,7 +228,7 @@
       <\/script>`;
       document.open();
       document.write(source
-        .replace("<head>", '<head><base href="/">')
+        .replace("<head>", '<head><base href="/">' + backdropStyle)
         .replace('<script src="sidebar.js"></' + 'script>', mock + '<script src="sidebar.js"></' + 'script>'));
       document.close();
     });

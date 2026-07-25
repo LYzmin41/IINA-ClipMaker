@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "ghVersion": 1,
   "ghRepo": "LYzmin41/IINA-ClipMaker",
-  "description": "Mark multiple In/Out ranges in IINA and export them as separate video files with FFmpeg.",
+  "description": "Mark multiple In/Out ranges in IINA and export them as separate video files with FFmpeg-full.",
   "author": {
     "name": "pumpk",
     "url": "https://github.com/LYzmin41/IINA-ClipMaker"
@@ -12,7 +12,6 @@
   "entry": "main.js",
   "permissions": [
     "show-osd",
-    "show-alert",
     "file-system"
   ],
   "sidebarTab": {
@@ -23,6 +22,8 @@
     "outputFolder": "~/Desktop",
     "askWhereToSave": false,
     "ffmpegPath": "",
+    "ffmpegFullConfirmed": false,
+    "homebrewPath": "",
     "container": "source",
     "exportMode": "fast",
     "invertTimecodeScrolling": false,
